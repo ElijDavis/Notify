@@ -109,25 +109,28 @@ class DatabaseService {
 
   Future<void> createNote(Note note) async {
     final db = await instance.database;
-    final user = _supabase.auth.currentUser; // Get the logged-in user
+    final user = Supabase.instance.client.auth.currentUser;
 
+    // 1. Save to local SQLite (the Map handles 'id', 'title', 'content', 'created_at')
     await db.insert(
       'notes', 
       note.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace, 
     );
 
+    // 2. Sync to Supabase
     if (user != null) {
       try {
-        await _supabase.from('notes').upsert({
+        await Supabase.instance.client.from('notes').upsert({
           'id': note.id,
           'title': note.title,
           'content': note.content,
           'created_at': note.createdAt,
-          'user_id': user.id, // Explicitly tell Supabase who owns this
+          'user_id': user.id, // THIS IS THE KEY LINE FOR RLS
         });
+        print("Sync Successful!");
       } catch (e) {
-        print("Cloud sync failed, but local save worked: $e");
+        print("Cloud sync failed: $e");
       }
     }
   }
