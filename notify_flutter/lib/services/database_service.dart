@@ -20,9 +20,24 @@ class DatabaseService {
 
     return await openDatabase(
       path, 
-      version: 1, 
-      onCreate: _createDB
+      version: 2, 
+      onCreate: _createDB,
+      onUpgrade: _onUpgrade,
     );
+  }
+
+  Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE reminders (
+          id TEXT PRIMARY KEY,
+          note_id TEXT,
+          reminder_time TEXT,
+          is_completed INTEGER,
+          FOREIGN KEY (note_id) REFERENCES notes (id) ON DELETE CASCADE
+        )
+      ''');
+    }
   }
 
   Future _createDB(Database db, int version) async {
