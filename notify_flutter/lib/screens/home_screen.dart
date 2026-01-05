@@ -67,6 +67,15 @@ class _HomeScreenState extends State<HomeScreen> {
                             _refreshNotes();
                           },
                         ),
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => NoteEditorScreen(note: note), // Pass the existing note!
+                            ),
+                          );
+                          _refreshNotes();
+                        },
                       ),
                     );
                   },
