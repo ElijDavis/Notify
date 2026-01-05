@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/database_service.dart';
 import '../models/note_model.dart';
 import 'package:uuid/uuid.dart';
+import 'note_editor_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -71,7 +72,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                 ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _addTestNote,
+        onPressed: () async {
+          // This tells Flutter to slide the Editor Screen over the Home Screen
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const NoteEditorScreen()),
+          );
+          
+          // This line runs AFTER you come back from the editor
+          _refreshNotes(); 
+        },
         child: const Icon(Icons.add),
       ),
     );
