@@ -3,6 +3,7 @@ import '../models/note_model.dart';
 import '../services/database_service.dart';
 import 'package:uuid/uuid.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart'; // Add this import
 
 class NoteEditorScreen extends StatefulWidget {
   final Note? note; // If null, we are creating a new note
@@ -17,43 +18,35 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   late TextEditingController _contentController;
 
   DateTime? _selectedReminder; // This stores the chosen date and time
+  Color _selectedColor = Colors.white; // Default color
 
   @override
   void initState() {
     super.initState();
     _titleController = TextEditingController(text: widget.note?.title ?? '');
     _contentController = TextEditingController(text: widget.note?.content ?? '');
+    if (widget.note != null) {
+      _selectedColor = Color(widget.note!.colorValue);
+    }
   }
 
-  /*Future<void> _saveNote() async {
-    final id = widget.note?.id ?? const Uuid().v4();
-    
-    // 1. Save the Note as usual
-    final note = Note(
-      id: id,
-      title: _titleController.text,
-      content: _contentController.text,
-      createdAt: widget.note?.createdAt ?? DateTime.now().toIso8601String(),
+  void _pickColor() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Pick a note color'),
+        content: SingleChildScrollView(
+          child: BlockPicker(
+            pickerColor: _selectedColor,
+            onColorChanged: (color) {
+              setState(() => _selectedColor = color);
+              Navigator.pop(context);
+            },
+          ),
+        ),
+      ),
     );
-    await DatabaseService.instance.createNote(note);
-
-    // 2. If a reminder was picked, save it to the reminders table
-    if (_selectedReminder != null) {
-      final db = await DatabaseService.instance.database;
-      await db.insert(
-        'reminders',
-        {
-          'id': const Uuid().v4(),
-          'note_id': id,
-          'reminder_time': _selectedReminder!.toIso8601String(),
-          'is_completed': 0,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-    }
-
-    if (mounted) Navigator.pop(context);
-  }*/
+  }
 
   Future<void> _saveNote() async {
     final id = widget.note?.id ?? const Uuid().v4();
@@ -64,6 +57,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       title: _titleController.text,
       content: _contentController.text,
       createdAt: widget.note?.createdAt ?? DateTime.now().toIso8601String(),
+      colorValue: _selectedColor.value, // <--- Add this!
     );
     await DatabaseService.instance.createNote(note);
 
