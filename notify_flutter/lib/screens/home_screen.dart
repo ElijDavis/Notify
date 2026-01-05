@@ -36,6 +36,18 @@ class _HomeScreenState extends State<HomeScreen> {
           await DatabaseService.instance.syncFromCloud();
           _refreshNotes(); // Update the UI list
         });
+
+    // NEW: Listen for reminders
+    Supabase.instance.client
+      .from('reminders')
+      .stream(primaryKey: ['id'])
+      .listen((List<Map<String, dynamic>> data) async {
+        // When a reminder is added/changed in the cloud, sync it locally
+        await DatabaseService.instance.syncFromCloud();
+        
+        // This is where we will call the "Schedule Notification" function later
+        print("Reminders updated from cloud!");
+      });
   }
 
   @override
