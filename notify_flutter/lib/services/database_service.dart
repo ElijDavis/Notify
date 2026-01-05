@@ -151,4 +151,38 @@ class DatabaseService {
       );
     }
   }
+
+  // Add this helper function to save reminders to both Local and Cloud
+  Future<void> saveReminder(String id, String noteId, DateTime time) async {
+    final db = await instance.database;
+    final user = Supabase.instance.client.auth.currentUser;
+
+    // 1. Save locally
+    await db.insert(
+      'reminders',
+      {
+        'id': id,
+        'note_id': noteId,
+        'reminder_time': time.toIso8601String(),
+        'is_completed': 0,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+
+    // 2. Sync to Cloud
+    if (user != null) {
+      try {
+        await Supabase.instance.client.from('reminders').upsert({
+          'id': id,
+          'note_id': noteId,
+          'reminder_time': time.toIso8601String(),
+          'is_completed': false,
+          'user_id': user.id, // Keeps the RLS happy
+        });
+        print("Reminder synced to cloud!");
+      } catch (e) {
+        print("Reminder cloud sync failed: $e");
+      }
+    }
+  }
 }
