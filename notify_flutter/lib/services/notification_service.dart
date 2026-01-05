@@ -13,7 +13,7 @@ class NotificationService {
   // This map keeps track of active timers so we don't schedule duplicates
   final Map<String, Timer> _activeTimers = {};
 
-  Future<void> init() async {
+  /*Future<void> init() async {
     // 1. Define settings for each platform
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     
@@ -47,6 +47,34 @@ class NotificationService {
       if (androidPlugin != null) {
         await androidPlugin.requestNotificationsPermission();
       }
+    }
+  }*/
+
+  Future<void> init() async {
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const darwinSettings = DarwinInitializationSettings();
+    
+    // WINDOWS FIX: You MUST include linux settings for Windows to initialize correctly
+    const linuxSettings = LinuxInitializationSettings(defaultActionName: 'Open');
+
+    const initializationSettings = InitializationSettings(
+      android: androidSettings,
+      macOS: darwinSettings,
+      linux: linuxSettings, // This is the line that stops the Windows crash
+    );
+
+    await _notifications.initialize(
+      initializationSettings,
+      onDidReceiveNotificationResponse: (details) {
+        print("Notification clicked: ${details.payload}");
+      },
+    );
+    
+    // Only request Android permissions if we are actually on Android
+    if (Platform.isAndroid) {
+      final androidPlugin = _notifications.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      await androidPlugin?.requestNotificationsPermission();
     }
   }
 

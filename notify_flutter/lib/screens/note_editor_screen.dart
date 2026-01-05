@@ -25,7 +25,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     _contentController = TextEditingController(text: widget.note?.content ?? '');
   }
 
-  Future<void> _saveNote() async {
+  /*Future<void> _saveNote() async {
     final id = widget.note?.id ?? const Uuid().v4();
     
     // 1. Save the Note as usual
@@ -49,6 +49,30 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
           'is_completed': 0,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+
+    if (mounted) Navigator.pop(context);
+  }*/
+
+  Future<void> _saveNote() async {
+    final id = widget.note?.id ?? const Uuid().v4();
+    
+    // 1. Save the Note (This handles both Local + Supabase)
+    final note = Note(
+      id: id,
+      title: _titleController.text,
+      content: _contentController.text,
+      createdAt: widget.note?.createdAt ?? DateTime.now().toIso8601String(),
+    );
+    await DatabaseService.instance.createNote(note);
+
+    // 2. Save the Reminder using the service (This handles both Local + Supabase)
+    if (_selectedReminder != null) {
+      await DatabaseService.instance.saveReminder(
+        const Uuid().v4(), 
+        id, 
+        _selectedReminder!,
       );
     }
 

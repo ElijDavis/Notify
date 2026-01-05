@@ -3,9 +3,10 @@ import '../services/database_service.dart';
 import '../models/note_model.dart';
 import 'package:uuid/uuid.dart';
 import 'note_editor_screen.dart';
-import 'dart:async'; // Fixes 'StreamSubscription'
-import 'package:supabase_flutter/supabase_flutter.dart'; // Fixes 'Supabase'
-import '../services/notification_service.dart'; // Import Notification Service
+import 'dart:async'; 
+import 'dart:io'; // Required for Platform check
+import 'package:supabase_flutter/supabase_flutter.dart'; 
+import '../services/notification_service.dart'; 
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -27,31 +28,33 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _setupRealtimeSync() {
-    // This listens for any change in the 'notes' table for the logged-in user
+    // 1. Listen for Note changes
     _syncStream = Supabase.instance.client
         .from('notes')
         .stream(primaryKey: ['id'])
         .order('created_at')
         .listen((List<Map<String, dynamic>> data) async {
-          // When the cloud changes, update local SQLite so they stay in sync
           await DatabaseService.instance.syncFromCloud();
-          _refreshNotes(); // Update the UI list
+          _refreshNotes();
         });
 
-    // NEW: Listen for reminders
+    // 2. Listen for Reminders and trigger local notifications
     Supabase.instance.client
       .from('reminders')
       .stream(primaryKey: ['id'])
       .listen((List<Map<String, dynamic>> data) async {
+        // Sync local DB first so we have the data
         await DatabaseService.instance.syncFromCloud();
         
-        // Loop through reminders and schedule them!
         for (var rem in data) {
           DateTime time = DateTime.parse(rem['reminder_time']);
+          
+          // Only schedule if it's in the future
           if (time.isAfter(DateTime.now())) {
             NotificationService().scheduleNotification(
-              rem['id'], 
-              "Note Reminder", // You can pull the actual note title here later
+              // Convert UUID string to an integer ID for the notification engine
+              rem['id'].toString(), 
+              "Note Reminder", 
               time
             );
           }
@@ -61,35 +64,27 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _syncStream.cancel(); // Stop listening when app closes
+    _syncStream.cancel(); 
     super.dispose();
   }
 
   Future<void> _initialSync() async {
-    await DatabaseService.instance.syncFromCloud(); // Pull from cloud
-    _refreshNotes(); // Show them on the screen
+    try {
+      await DatabaseService.instance.syncFromCloud();
+    } catch (e) {
+      print("Initial sync failed: $e");
+    }
+    _refreshNotes();
   }
 
-  // This function fetches the notes from the database
   Future<void> _refreshNotes() async {
     final data = await DatabaseService.instance.readAllNotes();
-    setState(() {
-      _notes = data;
-      _isLoading = false;
-    });
-  }
-
-  // Temporary function to add a quick note
-  Future<void> _addTestNote() async {
-    final newNote = Note(
-      id: const Uuid().v4(),
-      title: "Note #${_notes.length + 1}",
-      content: "This is a note saved in my local database!",
-      createdAt: DateTime.now().toIso8601String(),
-    );
-
-    await DatabaseService.instance.createNote(newNote);
-    _refreshNotes(); // Refresh the list after adding
+    if (mounted) {
+      setState(() {
+        _notes = data;
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -111,30 +106,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         subtitle: Text(note.content),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () async {
-                            bool confirm = await showDialog(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                title: const Text('Delete Note?'),
-                                content: const Text('This action cannot be undone.'),
-                                actions: [
-                                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-                                  TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
-                                ],
-                              ),
-                            ) ?? false;
-
-                            if (confirm) {
-                              await DatabaseService.instance.deleteNote(note.id);
-                              _refreshNotes();
-                            }
-                          },
+                          onPressed: () => _confirmDelete(note.id),
                         ),
                         onTap: () async {
                           await Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => NoteEditorScreen(note: note), // Pass the existing note!
+                              builder: (context) => NoteEditorScreen(note: note),
                             ),
                           );
                           _refreshNotes();
@@ -145,17 +123,35 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
-          // This tells Flutter to slide the Editor Screen over the Home Screen
+          // Open Editor
           await Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const NoteEditorScreen()),
           );
-          
-          // This line runs AFTER you come back from the editor
+          // When returning from Editor, refresh the list
           _refreshNotes(); 
         },
         child: const Icon(Icons.add),
       ),
     );
+  }
+
+  Future<void> _confirmDelete(String id) async {
+    bool confirm = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Note?'),
+        content: const Text('This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    ) ?? false;
+
+    if (confirm) {
+      await DatabaseService.instance.deleteNote(id);
+      _refreshNotes();
+    }
   }
 }

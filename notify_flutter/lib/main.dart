@@ -6,32 +6,6 @@ import 'screens/auth_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/notification_service.dart'; // Add this
 
-/*Future<void> main() async {
-
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize Supabase
-  await Supabase.initialize(
-    url: 'https://zsqofefvkcsvalcigyti.supabase.co',
-    anonKey: 'sb_publishable_5mYGQFeNIdxVdkPHBvEHFg_RLOoAQTj',
-  );
-
-  // 2. Initialize Notifications (Add this line)
-  //await NotificationService().init();
-  print("Initializing Notifications...");
-  NotificationService().init();
-  print("Notifications Ready!");
-
-  // 1. Check if we are on Desktop (Windows, Linux, or Mac)
-  if (Platform.isWindows || Platform.isLinux) {
-    // 2. Initialize the database factory for desktop
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  }
-
-  runApp(const MyApp());
-}*/
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
