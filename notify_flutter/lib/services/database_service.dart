@@ -39,9 +39,17 @@ class DatabaseService {
   // --- NEW FUNCTIONS TO INTERACT WITH NOTES ---
 
   // 1. Save a Note
+  // Change your createNote function to this:
   Future<void> createNote(Note note) async {
     final db = await instance.database;
-    await db.insert('notes', note.toMap());
+    
+    // conflictAlgorithm: ConflictAlgorithm.replace is the magic line.
+    // It handles both NEW notes and EDITED notes automatically.
+    await db.insert(
+      'notes', 
+      note.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace, 
+    );
   }
 
   // 2. Get All Notes
