@@ -81,7 +81,7 @@ class DatabaseService {
   }*/
   final _supabase = Supabase.instance.client;
 
-  Future<void> createNote(Note note) async {
+  /*Future<void> createNote(Note note) async {
     final db = await instance.database;
     
     // 1. Save locally first (Instant feedback for the user)
@@ -104,6 +104,31 @@ class DatabaseService {
       // If there's no internet, the app keeps running locally.
       // We can handle re-syncing later.
       print("Sync Failed: $e");
+    }
+  }*/
+
+  Future<void> createNote(Note note) async {
+    final db = await instance.database;
+    final user = _supabase.auth.currentUser; // Get the logged-in user
+
+    await db.insert(
+      'notes', 
+      note.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace, 
+    );
+
+    if (user != null) {
+      try {
+        await _supabase.from('notes').upsert({
+          'id': note.id,
+          'title': note.title,
+          'content': note.content,
+          'created_at': note.createdAt,
+          'user_id': user.id, // Explicitly tell Supabase who owns this
+        });
+      } catch (e) {
+        print("Cloud sync failed, but local save worked: $e");
+      }
     }
   }
 
