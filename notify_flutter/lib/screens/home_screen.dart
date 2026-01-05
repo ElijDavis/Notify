@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
 import '../models/note_model.dart';
+import '../models/category_model.dart';
 import 'package:uuid/uuid.dart';
 import 'note_editor_screen.dart';
 import 'dart:async'; 
@@ -117,7 +118,8 @@ class _HomeScreenState extends State<HomeScreen> {
               title: const Text('Create New Tab'),
               onTap: () {
                 // Logic to show a dialog and create a category
-                Navigator.pop(context);
+                Navigator.pop(context); // Close Drawer
+                _showCreateCategoryDialog(); // Open Dialog
               },
             ),
           ],
@@ -185,5 +187,39 @@ class _HomeScreenState extends State<HomeScreen> {
       await DatabaseService.instance.deleteNote(id);
       _refreshNotes();
     }
+  }
+
+  void _showCreateCategoryDialog() {
+    final TextEditingController _categoryController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('New Tab'),
+        content: TextField(
+          controller: _categoryController,
+          decoration: const InputDecoration(hintText: 'Category Name (e.g. Flutter, Recipes)'),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              if (_categoryController.text.isNotEmpty) {
+                final newCat = Category(
+                  id: const Uuid().v4(),
+                  name: _categoryController.text,
+                );
+                await DatabaseService.instance.createCategory(newCat);
+                Navigator.pop(context);
+                // Trigger a refresh of the drawer
+                setState(() {}); 
+              }
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
   }
 }
