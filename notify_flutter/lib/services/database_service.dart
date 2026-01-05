@@ -38,6 +38,10 @@ class DatabaseService {
           FOREIGN KEY (note_id) REFERENCES notes (id) ON DELETE CASCADE
         )
       ''');
+
+      // Inside _createDB and _onUpgrade (if version increases)
+      await db.execute('ALTER TABLE notes ADD COLUMN color_value INTEGER DEFAULT 4294967295');
+      await db.execute('ALTER TABLE notes ADD COLUMN category_id TEXT');
     }
   }
 
@@ -62,6 +66,10 @@ class DatabaseService {
         FOREIGN KEY (note_id) REFERENCES notes (id) ON DELETE CASCADE
       )
     ''');
+
+    // Inside _createDB and _onUpgrade (if version increases)
+    await db.execute('ALTER TABLE notes ADD COLUMN color_value INTEGER DEFAULT 4294967295');
+    await db.execute('ALTER TABLE notes ADD COLUMN category_id TEXT');
   }
 
   // --- NEW FUNCTIONS TO INTERACT WITH NOTES ---
