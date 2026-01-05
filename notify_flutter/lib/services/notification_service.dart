@@ -68,14 +68,30 @@ class NotificationService {
 
   // This helper uses the simple .show() method which is very stable
   Future<void> _showImmediateNotification(String id, String title) async {
+    // 1. Define Android-specific details
+    // IMPORTANT: If you change these settings later, you MUST change the channel ID 
+    // (e.g., to 'alarm_channel_v2') for Android to recognize the new settings.
+    const androidDetails = AndroidNotificationDetails(
+      'alarm_channel_high_importance', // Unique ID for the channel
+      'Reminders',                     // User-visible name in system settings
+      channelDescription: 'Notifications for your scheduled notes',
+      importance: Importance.max,      // Makes it pop up on screen
+      priority: Priority.high,         // Ensures high visibility
+      playSound: true,                 // Tells Android to play the default sound
+      ticker: 'ticker',
+    );
+
+    // 2. Combine with macOS details
     const notificationDetails = NotificationDetails(
       macOS: DarwinNotificationDetails(
         presentAlert: true,
         presentSound: true,
         presentBadge: true,
       ),
+      android: androidDetails,
     );
 
+    // 3. Show the notification
     await _notifications.show(
       id.hashCode.abs(),
       'Reminder',
@@ -84,11 +100,12 @@ class NotificationService {
       payload: id,
     );
   }
-  
+
   void cancelAll() {
     for (var timer in _activeTimers.values) {
       timer.cancel();
     }
     _activeTimers.clear();
+    _notifications.cancelAll(); // Also clears any active system notifications
   }
 }
