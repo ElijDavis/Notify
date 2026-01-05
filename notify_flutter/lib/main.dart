@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
-import 'screens/home_screen.dart'; // Import your screen
+import 'dart:io'; // Add this for Platform check
+import 'package:sqflite_common_ffi/sqflite_ffi.dart'; // Add this
+import 'screens/home_screen.dart';
 
 void main() {
+  // 1. Check if we are on Desktop (Windows, Linux, or Mac)
+  if (Platform.isWindows || Platform.isLinux) {
+    // 2. Initialize the database factory for desktop
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
+
   runApp(const MyApp());
 }
 
