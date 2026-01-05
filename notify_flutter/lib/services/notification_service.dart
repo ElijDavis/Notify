@@ -1,5 +1,6 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'dart:async';
+import 'dart:io';
 
 class NotificationService {
   // Singleton pattern to use the same instance everywhere
@@ -13,17 +14,21 @@ class NotificationService {
   final Map<String, Timer> _activeTimers = {};
 
   Future<void> init() async {
-    // 1. Define Android settings (using the default app icon)
+    // 1. Define settings for each platform
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-
+    
+    // Note: For Windows, we add Darwin settings or default initialization
+    // but the specific fix is ensuring the InitializationSettings object is complete.
     const initializationSettings = InitializationSettings(
       macOS: DarwinInitializationSettings(
         requestAlertPermission: true,
         requestBadgePermission: true,
         requestSoundPermission: true,
       ),
-      android: androidSettings, // <--- ADD THIS LINE
+      android: androidSettings,
       linux: LinuxInitializationSettings(defaultActionName: 'Open'),
+      // If your package version supports it, you can add Windows: here, 
+      // otherwise, the Darwin/Linux settings act as the fallback for desktop.
     );
 
     // 2. Initialize
@@ -35,11 +40,13 @@ class NotificationService {
     );
 
     // 3. Request Permission for Samsung (Android 13+)
-    final androidPlugin = _notifications.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
-    
-    if (androidPlugin != null) {
-      await androidPlugin.requestNotificationsPermission();
+    if (Platform.isAndroid) {
+      final androidPlugin = _notifications.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      
+      if (androidPlugin != null) {
+        await androidPlugin.requestNotificationsPermission();
+      }
     }
   }
 
