@@ -42,11 +42,19 @@ class _HomeScreenState extends State<HomeScreen> {
       .from('reminders')
       .stream(primaryKey: ['id'])
       .listen((List<Map<String, dynamic>> data) async {
-        // When a reminder is added/changed in the cloud, sync it locally
         await DatabaseService.instance.syncFromCloud();
         
-        // This is where we will call the "Schedule Notification" function later
-        print("Reminders updated from cloud!");
+        // Loop through reminders and schedule them!
+        for (var rem in data) {
+          DateTime time = DateTime.parse(rem['reminder_time']);
+          if (time.isAfter(DateTime.now())) {
+            NotificationService().scheduleNotification(
+              rem['id'], 
+              "Note Reminder", // You can pull the actual note title here later
+              time
+            );
+          }
+        }
       });
   }
 
