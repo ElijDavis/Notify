@@ -41,12 +41,24 @@ class DatabaseService {
   }
 
   Future _createDB(Database db, int version) async {
+    // Create Notes Table
     await db.execute('''
       CREATE TABLE notes (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         content TEXT NOT NULL,
         created_at TEXT NOT NULL
+      )
+    ''');
+
+    // Create Reminders Table
+    await db.execute('''
+      CREATE TABLE reminders (
+        id TEXT PRIMARY KEY,
+        note_id TEXT,
+        reminder_time TEXT,
+        is_completed INTEGER,
+        FOREIGN KEY (note_id) REFERENCES notes (id) ON DELETE CASCADE
       )
     ''');
   }
