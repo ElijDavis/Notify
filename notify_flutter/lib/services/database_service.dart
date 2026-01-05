@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/note_model.dart'; // Import your model
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class DatabaseService {
   static final DatabaseService instance = DatabaseService._init();
@@ -67,7 +68,7 @@ class DatabaseService {
 
   // 1. Save a Note
   // Change your createNote function to this:
-  Future<void> createNote(Note note) async {
+  /*Future<void> createNote(Note note) async {
     final db = await instance.database;
     
     // conflictAlgorithm: ConflictAlgorithm.replace is the magic line.
@@ -77,6 +78,33 @@ class DatabaseService {
       note.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace, 
     );
+  }*/
+  final _supabase = Supabase.instance.client;
+
+  Future<void> createNote(Note note) async {
+    final db = await instance.database;
+    
+    // 1. Save locally first (Instant feedback for the user)
+    await db.insert(
+      'notes', 
+      note.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace, 
+    );
+
+    // 2. Sync to the Cloud (Supabase)
+    try {
+      await _supabase.from('notes').upsert({
+        'id': note.id,
+        'title': note.title,
+        'content': note.content,
+        'created_at': note.createdAt,
+      });
+      print("Sync Successful!");
+    } catch (e) {
+      // If there's no internet, the app keeps running locally.
+      // We can handle re-syncing later.
+      print("Sync Failed: $e");
+    }
   }
 
   // 2. Get All Notes
