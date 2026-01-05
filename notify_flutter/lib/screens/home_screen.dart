@@ -63,8 +63,22 @@ class _HomeScreenState extends State<HomeScreen> {
                         trailing: IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
                           onPressed: () async {
-                            await DatabaseService.instance.deleteNote(note.id);
-                            _refreshNotes();
+                            bool confirm = await showDialog(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text('Delete Note?'),
+                                content: const Text('This action cannot be undone.'),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+                                  TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+                                ],
+                              ),
+                            ) ?? false;
+
+                            if (confirm) {
+                              await DatabaseService.instance.deleteNote(note.id);
+                              _refreshNotes();
+                            }
                           },
                         ),
                         onTap: () async {
