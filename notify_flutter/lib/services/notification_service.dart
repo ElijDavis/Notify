@@ -13,23 +13,34 @@ class NotificationService {
   final Map<String, Timer> _activeTimers = {};
 
   Future<void> init() async {
-    // Basic settings for Mac and Windows
+    // 1. Define Android settings (using the default app icon)
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+
     const initializationSettings = InitializationSettings(
       macOS: DarwinInitializationSettings(
         requestAlertPermission: true,
         requestBadgePermission: true,
         requestSoundPermission: true,
       ),
-      // For Windows, default initialization is usually sufficient
+      android: androidSettings, // <--- ADD THIS LINE
       linux: LinuxInitializationSettings(defaultActionName: 'Open'),
     );
 
+    // 2. Initialize
     await _notifications.initialize(
       initializationSettings,
       onDidReceiveNotificationResponse: (details) {
         print("Notification clicked: ${details.payload}");
       },
     );
+
+    // 3. Request Permission for Samsung (Android 13+)
+    final androidPlugin = _notifications.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    
+    if (androidPlugin != null) {
+      await androidPlugin.requestNotificationsPermission();
+    }
   }
 
   Future<void> scheduleNotification(String id, String title, DateTime scheduledTime) async {

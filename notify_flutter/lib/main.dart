@@ -17,7 +17,10 @@ Future<void> main() async {
   );
 
   // 2. Initialize Notifications (Add this line)
-  await NotificationService().init();
+  //await NotificationService().init();
+  print("Initializing Notifications...");
+  NotificationService().init();
+  print("Notifications Ready!");
 
   // 1. Check if we are on Desktop (Windows, Linux, or Mac)
   if (Platform.isWindows || Platform.isLinux) {
