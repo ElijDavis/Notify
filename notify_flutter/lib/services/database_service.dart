@@ -124,4 +124,41 @@ class DatabaseService {
       whereArgs: [id],
     );
   }
+
+  Future<void> syncFromCloud() async {
+    final supabase = Supabase.instance.client;
+    final db = await instance.database;
+
+    // 1. Pull all notes from Supabase
+    final cloudNotes = await supabase.from('notes').select();
+
+    // 2. Save them into local SQLite
+    for (var noteData in cloudNotes) {
+      await db.insert(
+        'notes',
+        {
+          'id': noteData['id'],
+          'title': noteData['title'],
+          'content': noteData['content'],
+          'created_at': noteData['created_at'],
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+
+    // 3. Pull and sync reminders as well
+    final cloudReminders = await supabase.from('reminders').select();
+    for (var remData in cloudReminders) {
+      await db.insert(
+        'reminders',
+        {
+          'id': remData['id'],
+          'note_id': remData['note_id'],
+          'reminder_time': remData['reminder_time'],
+          'is_completed': remData['is_completed'] ? 1 : 0,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+  }
 }

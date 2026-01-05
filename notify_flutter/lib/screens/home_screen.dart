@@ -18,7 +18,12 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _refreshNotes();
+    _initialSync();
+  }
+
+  Future<void> _initialSync() async {
+    await DatabaseService.instance.syncFromCloud(); // Pull from cloud
+    _refreshNotes(); // Show them on the screen
   }
 
   // This function fetches the notes from the database
