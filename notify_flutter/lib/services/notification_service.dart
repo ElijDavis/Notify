@@ -51,26 +51,33 @@ class NotificationService {
   }*/
 
   Future<void> init() async {
+    // 1. Standard Android/iOS/MacOS settings
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const darwinSettings = DarwinInitializationSettings();
-    
-    // WINDOWS FIX: You MUST include linux settings for Windows to initialize correctly
     const linuxSettings = LinuxInitializationSettings(defaultActionName: 'Open');
 
+    // 2. Combine them
     const initializationSettings = InitializationSettings(
       android: androidSettings,
       macOS: darwinSettings,
-      linux: linuxSettings, // This is the line that stops the Windows crash
+      linux: linuxSettings,
     );
 
-    await _notifications.initialize(
-      initializationSettings,
-      onDidReceiveNotificationResponse: (details) {
-        print("Notification clicked: ${details.payload}");
-      },
-    );
-    
-    // Only request Android permissions if we are actually on Android
+    try {
+      // 3. Initialize the plugin
+      await _notifications.initialize(
+        initializationSettings,
+        onDidReceiveNotificationResponse: (details) {
+          print("Notification clicked: ${details.payload}");
+        },
+      );
+      print("Notifications: Successfully initialized on ${Platform.operatingSystem}");
+    } catch (e) {
+      // This catches the Windows error so the app doesn't crash/stop
+      print("Notifications: Initialization warning: $e");
+    }
+
+    // 4. Android-specific Permission Request
     if (Platform.isAndroid) {
       final androidPlugin = _notifications.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
