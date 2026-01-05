@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import 'note_editor_screen.dart';
 import 'dart:async'; // Fixes 'StreamSubscription'
 import 'package:supabase_flutter/supabase_flutter.dart'; // Fixes 'Supabase'
+import '../services/notification_service.dart'; // Import Notification Service
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});

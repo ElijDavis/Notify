@@ -4,6 +4,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart'; // Add this
 import 'screens/home_screen.dart';
 import 'screens/auth_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'services/notification_service.dart'; // Add this
 
 Future<void> main() async {
 
@@ -14,6 +15,9 @@ Future<void> main() async {
     url: 'https://zsqofefvkcsvalcigyti.supabase.co',
     anonKey: 'sb_publishable_5mYGQFeNIdxVdkPHBvEHFg_RLOoAQTj',
   );
+
+  // 2. Initialize Notifications (Add this line)
+  await NotificationService().init();
 
   // 1. Check if we are on Desktop (Windows, Linux, or Mac)
   if (Platform.isWindows || Platform.isLinux) {
