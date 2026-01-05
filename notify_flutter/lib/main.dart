@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:io'; // Add this for Platform check
 import 'package:sqflite_common_ffi/sqflite_ffi.dart'; // Add this
 import 'screens/home_screen.dart';
+import 'screens/auth_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 Future<void> main() async {
@@ -29,10 +30,13 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Check if a session already exists
+    final session = Supabase.instance.client.auth.currentSession;
+
     return MaterialApp(
       title: 'Notify',
       theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
-      home: const HomeScreen(), // Set HomeScreen as the starting page
+      home: session != null ? const HomeScreen() : const AuthScreen(),
     );
   }
 }
