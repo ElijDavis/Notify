@@ -3,6 +3,8 @@ import '../services/database_service.dart';
 import '../models/note_model.dart';
 import 'package:uuid/uuid.dart';
 import 'note_editor_screen.dart';
+import 'dart:async'; // Fixes 'StreamSubscription'
+import 'package:supabase_flutter/supabase_flutter.dart'; // Fixes 'Supabase'
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,11 +16,32 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   List<Note> _notes = [];
   bool _isLoading = true;
+  late StreamSubscription<List<Map<String, dynamic>>> _syncStream;
 
   @override
   void initState() {
     super.initState();
     _initialSync();
+    _setupRealtimeSync();
+  }
+
+  void _setupRealtimeSync() {
+    // This listens for any change in the 'notes' table for the logged-in user
+    _syncStream = Supabase.instance.client
+        .from('notes')
+        .stream(primaryKey: ['id'])
+        .order('created_at')
+        .listen((List<Map<String, dynamic>> data) async {
+          // When the cloud changes, update local SQLite so they stay in sync
+          await DatabaseService.instance.syncFromCloud();
+          _refreshNotes(); // Update the UI list
+        });
+  }
+
+  @override
+  void dispose() {
+    _syncStream.cancel(); // Stop listening when app closes
+    super.dispose();
   }
 
   Future<void> _initialSync() async {
