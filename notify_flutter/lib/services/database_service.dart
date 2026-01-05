@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/note_model.dart'; 
+import '../models/category_model.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class DatabaseService {
@@ -184,5 +185,33 @@ class DatabaseService {
         print("Reminder cloud sync failed: $e");
       }
     }
+  }
+
+  //category functions
+
+  // 1. Create/Sync Category
+  Future<void> createCategory(Category category) async {
+    final db = await instance.database;
+    final user = Supabase.instance.client.auth.currentUser;
+
+    await db.insert('categories', category.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+
+    if (user != null) {
+      try {
+        await Supabase.instance.client.from('categories').upsert({
+          ...category.toMap(),
+          'user_id': user.id,
+        });
+      } catch (e) {
+        print("Category sync failed: $e");
+      }
+    }
+  }
+
+  // 2. Read Categories
+  Future<List<Category>> readCategories() async {
+    final db = await instance.database;
+    final result = await db.query('categories', orderBy: 'name ASC');
+    return result.map((json) => Category.fromMap(json)).toList();
   }
 }
