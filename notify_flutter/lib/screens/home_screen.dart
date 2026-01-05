@@ -91,6 +91,38 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('My Notes')),
+        drawer: Drawer(
+        child: Column(
+          children: [
+            const DrawerHeader(
+              decoration: BoxDecoration(color: Colors.blueGrey),
+              child: Center(
+                child: Text('TABS', 
+                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.all_inclusive),
+              title: const Text('All Notes'),
+              onTap: () {
+                // Logic to show all notes
+                Navigator.pop(context);
+              },
+            ),
+            const Divider(),
+            // Future: Use a ListView.builder here to show categories from the DB
+            ListTile(
+              leading: const Icon(Icons.add),
+              title: const Text('Create New Tab'),
+              onTap: () {
+                // Logic to show a dialog and create a category
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _notes.isEmpty

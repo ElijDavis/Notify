@@ -118,7 +118,12 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
             ),
             onPressed: _pickReminder,
           ),
-          IconButton(icon: const Icon(Icons.save), onPressed: _saveNote)],
+          IconButton(icon: const Icon(Icons.save), onPressed: _saveNote),
+          IconButton(
+            icon: Icon(Icons.palette, color: _selectedColor),
+            onPressed: _pickColor,
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
