@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import '../services/database_service.dart';
 import '../models/note_model.dart';
 import '../models/category_model.dart';
@@ -7,7 +8,7 @@ import 'note_editor_screen.dart';
 import 'dart:async'; 
 import 'dart:io'; // Required for Platform check
 import 'package:supabase_flutter/supabase_flutter.dart'; 
-import '../services/notification_service.dart'; 
+import '../services/notification_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -217,34 +218,52 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showCreateCategoryDialog() {
     final TextEditingController _categoryController = TextEditingController();
-    
+    Color _tempColor = Colors.grey; // Default color for the new tab
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('New Tab'),
-        content: TextField(
-          controller: _categoryController,
-          decoration: const InputDecoration(hintText: 'Category Name (e.g. Flutter, Recipes)'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              if (_categoryController.text.isNotEmpty) {
-                final newCat = Category(
-                  id: const Uuid().v4(),
-                  name: _categoryController.text,
-                );
-                await DatabaseService.instance.createCategory(newCat);
-                Navigator.pop(context);
-                // Trigger a refresh of the drawer
-                setState(() {}); 
-              }
-            },
-            child: const Text('Create'),
+      builder: (context) => StatefulBuilder( // Needed to update color inside the dialog
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('New Tab'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _categoryController,
+                decoration: const InputDecoration(hintText: 'Category Name'),
+              ),
+              const SizedBox(height: 20),
+              const Text("Pick Tab Color:"),
+              const SizedBox(height: 10),
+              // A simple horizontal scroll of colors
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: BlockPicker(
+                  pickerColor: _tempColor,
+                  onColorChanged: (color) => setDialogState(() => _tempColor = color),
+                ),
+              ),
+            ],
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                if (_categoryController.text.isNotEmpty) {
+                  final newCat = Category(
+                    id: const Uuid().v4(),
+                    name: _categoryController.text,
+                    colorValue: _tempColor.value,
+                  );
+                  await DatabaseService.instance.createCategory(newCat);
+                  _loadDrawerCategories(); // Refresh the list
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('Create'),
+            ),
+          ],
+        ),
       ),
     );
   }
