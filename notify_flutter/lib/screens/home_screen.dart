@@ -97,6 +97,22 @@ class _HomeScreenState extends State<HomeScreen> {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
+    final categoriesData = await Supabase.instance.client
+      .from('categories')
+      .select()
+      .eq('owner_id', user.id);
+
+    for (var cat in categoriesData) {
+      await db.insert('categories', {
+        'id': cat['id'],
+        'name': cat['name'],
+        'color_value': cat['color_value'],
+        'parent_category_id': cat['parent_category_id'],
+        'share_code': cat['share_code'],
+        'owner_id': cat['owner_id'],
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+
     // 1. Get IDs for categories I've joined
     final List<Map<String, dynamic>> memberCats = await Supabase.instance.client
         .from('category_members')
