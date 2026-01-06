@@ -92,12 +92,15 @@ class DatabaseService {
       )
     ''');
 
+    // FIXED: Added missing columns here
     await db.execute('''
       CREATE TABLE categories (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         color_value INTEGER,
-        parent_category_id TEXT
+        parent_category_id TEXT,
+        share_code TEXT,
+        owner_id TEXT
       )
     ''');
   }
@@ -192,32 +195,18 @@ class DatabaseService {
   //category functions
 
   // 1. Create/Sync Category
-  /*Future<void> createCategory(Category category) async {
-    final db = await instance.database;
-    final user = Supabase.instance.client.auth.currentUser;
-
-    await db.insert('categories', category.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-
-    if (user != null) {
-      try {
-        await Supabase.instance.client.from('categories').upsert({
-          ...category.toMap(),
-          'user_id': user.id,
-        });
-      } catch (e) {
-        print("Category sync failed: $e");
-      }
-    }
-  }*/
-
   Future<void> createCategory(Category category) async {
     final db = await instance.database;
     
     // 1. Save Locally
-    await db.insert('categories', category.toMap());
+    await db.insert('categories', category.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
 
-    // 2. Save to Supabase
-    await Supabase.instance.client.from('categories').insert(category.toMap());
+    // 2. Save to Supabase 
+    // We ensure both ID columns are filled so Supabase RLS doesn't block us
+    final Map<String, dynamic> supabaseData = category.toMap();
+    supabaseData['user_id'] = category.ownerId; 
+
+    await Supabase.instance.client.from('categories').insert(supabaseData);
   }
 
   // 2. Read Categories
@@ -231,29 +220,40 @@ class DatabaseService {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
-    // 1. Check if I am the owner in Supabase
-    final catData = await Supabase.instance.client
-        .from('categories')
-        .select('owner_id')
-        .eq('id', categoryId)
-        .single();
+    try {
+      // 1. Fetch the category from Supabase to check ownership
+      final catData = await Supabase.instance.client
+          .from('categories')
+          .select('owner_id')
+          .eq('id', categoryId)
+          .maybeSingle(); // Use maybeSingle to avoid crashing if already gone
 
-    if (catData['owner_id'] == user.id) {
-      // I am the owner: Delete it everywhere
-      await Supabase.instance.client.from('categories').delete().eq('id', categoryId);
-    } else {
-      // I am a guest: Just remove my membership
-      await Supabase.instance.client
-          .from('category_members')
-          .delete()
-          .eq('category_id', categoryId)
-          .eq('user_id', user.id);
+      if (catData != null) {
+        if (catData['owner_id'] == user.id) {
+          // I am the owner: Delete from Supabase
+          await Supabase.instance.client
+              .from('categories')
+              .delete()
+              .eq('id', categoryId);
+          print("Supabase: Category deleted by owner.");
+        } else {
+          // I am a guest: Just remove my membership record
+          await Supabase.instance.client
+              .from('category_members')
+              .delete()
+              .eq('category_id', categoryId)
+              .eq('user_id', user.id);
+          print("Supabase: Membership removed for guest.");
+        }
+      }
+    } catch (e) {
+      print("Supabase Delete Error: $e");
+      // We continue to local cleanup even if cloud fails so the UI stays responsive
     }
 
-    // 2. Clean up locally
+    // 2. Clean up local SQLite regardless of cloud success
     final db = await instance.database;
     await db.delete('categories', where: 'id = ?', whereArgs: [categoryId]);
-    // Null out notes assigned to this deleted/left tab
     await db.update('notes', {'category_id': null}, where: 'category_id = ?', whereArgs: [categoryId]);
   }
 }
