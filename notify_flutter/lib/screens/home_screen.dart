@@ -9,6 +9,7 @@ import 'dart:async';
 import 'dart:io'; // Required for Platform check
 import 'package:supabase_flutter/supabase_flutter.dart'; 
 import '../services/notification_service.dart';
+import 'package:share_plus/share_plus.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -275,6 +276,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: const Icon(Icons.delete, color: Colors.red),
                   onPressed: () => _confirmDelete(note.id),
                 ),
+                onLongPress: () {
+                  Share.share(
+                    '${note.title}\n\n${note.content}',
+                    subject: note.title,
+                  );
+                },
                 onTap: () async {
                   await Navigator.push(
                     context,
@@ -289,8 +296,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   top: 8,
                   right: 8,
                   child: Container(
-                    width: 12,
-                    height: 12,
+                    width: 16,
+                    height: 16,
                     decoration: BoxDecoration(
                       color: categoryColor,
                       shape: BoxShape.circle,

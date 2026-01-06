@@ -5,6 +5,7 @@ import '../services/database_service.dart';
 import 'package:uuid/uuid.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart'; // Add this import
+import 'package:share_plus/share_plus.dart';
 
 class NoteEditorScreen extends StatefulWidget {
   final Note? note; // If null, we are creating a new note
@@ -136,6 +137,18 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       appBar: AppBar(
         title: const Text('Edit Note'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.share),
+            onPressed: () {
+              if (_titleController.text.isNotEmpty || _contentController.text.isNotEmpty) {
+                // This opens the native phone share sheet
+                Share.share(
+                  '${_titleController.text}\n\n${_contentController.text}',
+                  subject: 'Sharing Note: ${_titleController.text}',
+                );
+              }
+            },
+          ),
           IconButton(
             icon: Icon(
               Icons.alarm,
