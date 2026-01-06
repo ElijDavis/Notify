@@ -37,8 +37,20 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
 
   Future<void> _loadCategories() async {
     final cats = await DatabaseService.instance.readCategories();
+    
     setState(() {
       _categories = cats;
+
+      // SAFETY CHECK: 
+      // If the note has a categoryId, but that ID isn't in our new list of categories...
+      if (_selectedCategoryId != null) {
+        bool categoryExists = _categories.any((cat) => cat.id == _selectedCategoryId);
+        
+        if (!categoryExists) {
+          // ...then reset it to null so the dropdown doesn't crash!
+          _selectedCategoryId = null;
+        }
+      }
     });
   }
 
