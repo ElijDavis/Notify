@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:notify_flutter/screens/auth_screen.dart';
 import 'package:sqflite/sqflite.dart';
 import '../services/database_service.dart';
 import '../models/note_model.dart';
@@ -92,70 +93,76 @@ class _HomeScreenState extends State<HomeScreen> {
     _refreshNotes();
   }
 
-  Future<void> _refreshNotes() async {
-    final db = await DatabaseService.instance.database;
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) return;
+Future<void> _refreshNotes() async {
+  final db = await DatabaseService.instance.database;
+  final user = Supabase.instance.client.auth.currentUser;
+  if (user == null) return;
 
-    final categoriesData = await Supabase.instance.client
+  // 1. Sync Categories YOU OWN
+  final cloudCategories = await Supabase.instance.client
       .from('categories')
       .select()
       .eq('owner_id', user.id);
 
-    for (var cat in categoriesData) {
-      await db.insert('categories', {
-        'id': cat['id'],
-        'name': cat['name'],
-        'color_value': cat['color_value'],
-        'parent_category_id': cat['parent_category_id'],
-        'share_code': cat['share_code'],
-        'owner_id': cat['owner_id'],
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
-    }
-
-    // 1. Get IDs for categories I've joined
-    final List<Map<String, dynamic>> memberCats = await Supabase.instance.client
-        .from('category_members')
-        .select('category_id')
-        .eq('user_id', user.id);
-    
-    final sharedIds = memberCats.map((m) => m['category_id'] as String).toList();
-
-    // 2. Sync Shared Notes to Local SQLite
-    if (sharedIds.isNotEmpty) {
-      final sharedNotesData = await Supabase.instance.client
-          .from('notes')
-          .select()
-          .inFilter('category_id', sharedIds); // FIXED: renamed to inFilter
-
-      for (var noteData in sharedNotesData) {
-        // FIXED: Ensure sqflite is imported for ConflictAlgorithm
-        await db.insert('notes', noteData, conflictAlgorithm: ConflictAlgorithm.replace);
-      }
-    }
-    
-    // 3. Update Master List for Counters
-    final allData = await db.query('notes');
-    _allNotesForCounting = allData.map((json) => Note.fromMap(json)).toList();
-
-    // 4. Update Filtered UI List
-    List<Map<String, dynamic>> result;
-    if (_filterCategoryId == null) {
-      result = await db.query('notes', orderBy: 'created_at DESC');
-    } else {
-      result = await db.query(
-        'notes', 
-        where: 'category_id = ?', 
-        whereArgs: [_filterCategoryId], 
-        orderBy: 'created_at DESC'
-      );
-    }
-
-    setState(() {
-      _notes = result.map((json) => Note.fromMap(json)).toList();
-      _isLoading = false;
-    });
+  for (var cat in cloudCategories) {
+    await db.insert('categories', cat, conflictAlgorithm: ConflictAlgorithm.replace);
   }
+
+  // 2. Sync Categories YOU JOINED (Shared with you)
+  // We perform a "Join" query to get the category details for memberships
+  final memberRecords = await Supabase.instance.client
+      .from('category_members')
+      .select('category_id, categories(*)')
+      .eq('user_id', user.id);
+
+  List<String> joinedCatIds = [];
+  for (var record in memberRecords) {
+    if (record['categories'] != null) {
+      final cat = record['categories'];
+      joinedCatIds.add(cat['id']);
+      await db.insert('categories', cat, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+  }
+
+  // 3. Sync ALL Notes (Owned & Shared)
+  // Get IDs of all categories you now have locally to fetch their notes
+  final localCats = await db.query('categories');
+  final allVisibleCatIds = localCats.map((c) => c['id'] as String).toList();
+
+  if (allVisibleCatIds.isNotEmpty) {
+    final allNotesData = await Supabase.instance.client
+        .from('notes')
+        .select()
+        .inFilter('category_id', allVisibleCatIds);
+
+    for (var noteData in allNotesData) {
+      await db.insert('notes', noteData, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+  }
+
+  // 4. Update UI State
+  _loadDrawerCategories(); // Refresh the Sidebar list
+  
+  final allData = await db.query('notes');
+  _allNotesForCounting = allData.map((json) => Note.fromMap(json)).toList();
+
+  List<Map<String, dynamic>> result;
+  if (_filterCategoryId == null) {
+    result = await db.query('notes', orderBy: 'created_at DESC');
+  } else {
+    result = await db.query(
+      'notes', 
+      where: 'category_id = ?', 
+      whereArgs: [_filterCategoryId], 
+      orderBy: 'created_at DESC'
+    );
+  }
+
+  setState(() {
+    _notes = result.map((json) => Note.fromMap(json)).toList();
+    _isLoading = false;
+  });
+}
 
   int _getNoteCount(String? categoryId) {
     if (categoryId == null) return _allNotesForCounting.length;
@@ -299,10 +306,24 @@ class _HomeScreenState extends State<HomeScreen> {
             leading: const Icon(Icons.logout, color: Colors.redAccent),
             title: const Text('Logout', style: TextStyle(color: Colors.redAccent)),
             onTap: () async {
+              // 1. Log out from Supabase
               await Supabase.instance.client.auth.signOut();
-              // After logout, send them back to the Login screen
-              // Note: Replace 'LoginScreen' with the actual name of your login class
-              Navigator.pushReplacementNamed(context, '/login'); 
+              
+              // 2. Wipe the local database tables
+              final db = await DatabaseService.instance.database;
+              await db.delete('notes');
+              await db.delete('categories');
+              await db.delete('reminders');
+              // Add any other tables like 'category_members' if you created them locally
+
+              // 3. Navigate back to Auth screen
+              if (mounted) {
+                Navigator.pushAndRemoveUntil(
+                  context, 
+                  MaterialPageRoute(builder: (context) => const AuthScreen()),
+                  (route) => false, // Clears the entire navigation history
+                );
+              }
             },
           ),
           const SizedBox(height: 10), // Some breathing room at the bottom
