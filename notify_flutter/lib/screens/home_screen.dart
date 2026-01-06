@@ -21,6 +21,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   late StreamSubscription<List<Map<String, dynamic>>> _syncStream;
   String? _filterCategoryId; // Null means "Show All"
+  List<Category> _drawerCategories = [];
 
   @override
   void initState() {
@@ -104,34 +105,47 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('My Notes')),
-        drawer: Drawer(
+      drawer: Drawer(
         child: Column(
           children: [
             const DrawerHeader(
               decoration: BoxDecoration(color: Colors.blueGrey),
-              child: Center(
-                child: Text('TABS', 
-                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)
-                ),
-              ),
+              child: Center(child: Text('TABS', style: TextStyle(color: Colors.white, fontSize: 24))),
             ),
             ListTile(
               leading: const Icon(Icons.all_inclusive),
               title: const Text('All Notes'),
               onTap: () {
-                // Logic to show all notes
+                setState(() => _filterCategoryId = null);
+                _refreshNotes();
                 Navigator.pop(context);
               },
             ),
+            // --- DYNAMIC CATEGORIES LIST ---
+            Expanded(
+              child: ListView.builder(
+                itemCount: _drawerCategories.length,
+                itemBuilder: (context, index) {
+                  final cat = _drawerCategories[index];
+                  return ListTile(
+                    leading: Icon(Icons.label, color: Color(cat.colorValue)),
+                    title: Text(cat.name),
+                    onTap: () {
+                      setState(() => _filterCategoryId = cat.id);
+                      _refreshNotes();
+                      Navigator.pop(context);
+                    },
+                  );
+                },
+              ),
+            ),
             const Divider(),
-            // Future: Use a ListView.builder here to show categories from the DB
             ListTile(
               leading: const Icon(Icons.add),
               title: const Text('Create New Tab'),
               onTap: () {
-                // Logic to show a dialog and create a category
-                Navigator.pop(context); // Close Drawer
-                _showCreateCategoryDialog(); // Open Dialog
+                Navigator.pop(context);
+                _showCreateCategoryDialog();
               },
             ),
           ],
@@ -233,5 +247,13 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }
+
+  //load categories for drawer
+  Future<void> _loadDrawerCategories() async {
+    final cats = await DatabaseService.instance.readCategories();
+    setState(() {
+      _drawerCategories = cats;
+    });
   }
 }
