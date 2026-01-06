@@ -179,8 +179,21 @@ class _HomeScreenState extends State<HomeScreen> {
                     ListTile(
                       leading: Icon(Icons.folder, color: Color(parent.colorValue)),
                       title: Text(parent.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      trailing: Text('${_getNoteCount(parent.id)}', // <--- Note Count
-                        style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
+                      trailing: SizedBox(
+                        width: 80, // Gives enough room for both the number and the icon
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Text('${_getNoteCount(parent.id)}', 
+                                style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 20),
+                              onPressed: () => _confirmDeleteCategory(parent),
+                            ),
+                          ],
+                        ),
+                      ),
                       onTap: () {
                         setState(() => _filterCategoryId = parent.id);
                         _refreshNotes();
@@ -192,8 +205,20 @@ class _HomeScreenState extends State<HomeScreen> {
                           contentPadding: const EdgeInsets.only(left: 40), // Indent
                           leading: Icon(Icons.label_outlined, color: Color(child.colorValue), size: 18),
                           title: Text(child.name, style: const TextStyle(fontSize: 14)),
-                          trailing: Text('${_getNoteCount(child.id)}', // <--- Note Count
-                            style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                          trailing: SizedBox(
+                            width: 70, 
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Text('${_getNoteCount(child.id)}', 
+                                    style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, size: 18),
+                                  onPressed: () => _confirmDeleteCategory(child),
+                                ),
+                              ],
+                            ),
+                          ),
                           onTap: () {
                             setState(() => _filterCategoryId = child.id);
                             _refreshNotes();
@@ -370,5 +395,27 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _drawerCategories = cats;
     });
+  }
+
+  void _confirmDeleteCategory(Category cat) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete "${cat.name}"?'),
+        content: const Text('This will remove the tab. Notes in this tab will become "Uncategorized" but will NOT be deleted.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              await DatabaseService.instance.deleteCategory(cat.id);
+              _loadDrawerCategories();
+              _refreshNotes();
+              Navigator.pop(context);
+            }, 
+            child: const Text('Delete', style: TextStyle(color: Colors.red))
+          ),
+        ],
+      ),
+    );
   }
 }
