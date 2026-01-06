@@ -23,13 +23,20 @@ class _AuthScreenState extends State<AuthScreen> {
           password: _passwordController.text.trim(),
         );
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Check your email or try logging in!')));
+      // Inside _handleAuth, update the success block for Sign In:
       } else {
         await Supabase.instance.client.auth.signInWithPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
+        
         if (mounted) {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomeScreen()));
+          // This clears the navigation stack so the new user starts fresh
+          Navigator.pushAndRemoveUntil(
+            context, 
+            MaterialPageRoute(builder: (context) => const HomeScreen()),
+            (route) => false,
+          );
         }
       }
     } catch (e) {

@@ -93,76 +93,112 @@ class _HomeScreenState extends State<HomeScreen> {
     _refreshNotes();
   }
 
-Future<void> _refreshNotes() async {
-  final db = await DatabaseService.instance.database;
-  final user = Supabase.instance.client.auth.currentUser;
-  if (user == null) return;
+  Future<void> _refreshNotes() async {
+    setState(() => _isLoading = true);
 
-  // 1. Sync Categories YOU OWN
-  final cloudCategories = await Supabase.instance.client
-      .from('categories')
-      .select()
-      .eq('owner_id', user.id);
+    try {
+      final db = await DatabaseService.instance.database;
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
 
-  for (var cat in cloudCategories) {
-    await db.insert('categories', cat, conflictAlgorithm: ConflictAlgorithm.replace);
-  }
+      // 1. Sync Categories YOU OWN
+      final cloudCategories = await Supabase.instance.client
+          .from('categories')
+          .select()
+          .eq('owner_id', user.id);
 
-  // 2. Sync Categories YOU JOINED (Shared with you)
-  // We perform a "Join" query to get the category details for memberships
-  final memberRecords = await Supabase.instance.client
-      .from('category_members')
-      .select('category_id, categories(*)')
-      .eq('user_id', user.id);
+      for (var cat in cloudCategories) {
+        await db.insert('categories', {
+          'id': cat['id'],
+          'name': cat['name'],
+          'color_value': cat['color_value'],
+          'parent_category_id': cat['parent_category_id'],
+          'share_code': cat['share_code'],
+          'owner_id': cat['owner_id'],
+          // 'user_id' is intentionally omitted here to prevent SQLite errors
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
 
-  List<String> joinedCatIds = [];
-  for (var record in memberRecords) {
-    if (record['categories'] != null) {
-      final cat = record['categories'];
-      joinedCatIds.add(cat['id']);
-      await db.insert('categories', cat, conflictAlgorithm: ConflictAlgorithm.replace);
+      // 2. Sync Categories YOU JOINED (Shared with you)
+      // We fetch the category details via the category_members relationship
+      final memberRecords = await Supabase.instance.client
+          .from('category_members')
+          .select('category_id, categories(*)')
+          .eq('user_id', user.id);
+
+      for (var record in memberRecords) {
+        if (record['categories'] != null) {
+          final cat = record['categories'];
+          await db.insert('categories', {
+            'id': cat['id'],
+            'name': cat['name'],
+            'color_value': cat['color_value'],
+            'parent_category_id': cat['parent_category_id'],
+            'share_code': cat['share_code'],
+            'owner_id': cat['owner_id'],
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      }
+
+      // 3. Sync ALL Notes (for both owned and joined categories)
+      final localCats = await db.query('categories');
+      final allVisibleCatIds = localCats.map((c) => c['id'] as String).toList();
+
+      if (allVisibleCatIds.isNotEmpty) {
+        final allNotesData = await Supabase.instance.client
+            .from('notes')
+            .select()
+            .inFilter('category_id', allVisibleCatIds);
+
+        for (var noteData in allNotesData) {
+          // We ensure the note map matches your local SQLite note table columns
+          await db.insert('notes', {
+            'id': noteData['id'],
+            'title': noteData['title'],
+            'content': noteData['content'],
+            'category_id': noteData['category_id'],
+            'color_value': noteData['color_value'],
+            'created_at': noteData['created_at'],
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      }
+
+      // 4. Update the Drawer and Global Count
+      _loadDrawerCategories();
+      final allData = await db.query('notes');
+      _allNotesForCounting = allData.map((json) => Note.fromMap(json)).toList();
+
+      // 5. Update the Main UI List based on current filter
+      List<Map<String, dynamic>> result;
+      if (_filterCategoryId == null) {
+        result = await db.query('notes', orderBy: 'created_at DESC');
+      } else {
+        result = await db.query(
+          'notes',
+          where: 'category_id = ?',
+          whereArgs: [_filterCategoryId],
+          orderBy: 'created_at DESC',
+        );
+      }
+
+      setState(() {
+        _notes = result.map((json) => Note.fromMap(json)).toList();
+      });
+
+    } catch (e) {
+      print("Refresh Error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Sync failed: $e")),
+        );
+      }
+    } finally {
+      // This ensures the loading spinner stops even if an error occurs
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
-
-  // 3. Sync ALL Notes (Owned & Shared)
-  // Get IDs of all categories you now have locally to fetch their notes
-  final localCats = await db.query('categories');
-  final allVisibleCatIds = localCats.map((c) => c['id'] as String).toList();
-
-  if (allVisibleCatIds.isNotEmpty) {
-    final allNotesData = await Supabase.instance.client
-        .from('notes')
-        .select()
-        .inFilter('category_id', allVisibleCatIds);
-
-    for (var noteData in allNotesData) {
-      await db.insert('notes', noteData, conflictAlgorithm: ConflictAlgorithm.replace);
-    }
-  }
-
-  // 4. Update UI State
-  _loadDrawerCategories(); // Refresh the Sidebar list
-  
-  final allData = await db.query('notes');
-  _allNotesForCounting = allData.map((json) => Note.fromMap(json)).toList();
-
-  List<Map<String, dynamic>> result;
-  if (_filterCategoryId == null) {
-    result = await db.query('notes', orderBy: 'created_at DESC');
-  } else {
-    result = await db.query(
-      'notes', 
-      where: 'category_id = ?', 
-      whereArgs: [_filterCategoryId], 
-      orderBy: 'created_at DESC'
-    );
-  }
-
-  setState(() {
-    _notes = result.map((json) => Note.fromMap(json)).toList();
-    _isLoading = false;
-  });
-}
 
   int _getNoteCount(String? categoryId) {
     if (categoryId == null) return _allNotesForCounting.length;
