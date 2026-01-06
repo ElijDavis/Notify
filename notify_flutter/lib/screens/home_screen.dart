@@ -131,6 +131,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   return ListTile(
                     leading: Icon(Icons.label, color: Color(cat.colorValue)),
                     title: Text(cat.name),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 20),
+                      onPressed: () async {
+                        await DatabaseService.instance.deleteCategory(cat.id);
+                        _loadDrawerCategories(); // Refresh list
+                      },
+                    ),
                     onTap: () {
                       setState(() => _filterCategoryId = cat.id);
                       _refreshNotes();

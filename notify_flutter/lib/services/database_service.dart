@@ -214,4 +214,10 @@ class DatabaseService {
     final result = await db.query('categories', orderBy: 'name ASC');
     return result.map((json) => Category.fromMap(json)).toList();
   }
+
+  Future<void> deleteCategory(String id) async {
+    final db = await instance.database;
+    await db.delete('categories', where: 'id = ?', whereArgs: [id]);
+    await Supabase.instance.client.from('categories').delete().eq('id', id);
+  }
 }
