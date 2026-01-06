@@ -20,6 +20,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Note> _notes = [];
   bool _isLoading = true;
   late StreamSubscription<List<Map<String, dynamic>>> _syncStream;
+  String? _filterCategoryId; // Null means "Show All"
 
   @override
   void initState() {
@@ -79,13 +80,24 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refreshNotes() async {
-    final data = await DatabaseService.instance.readAllNotes();
-    if (mounted) {
-      setState(() {
-        _notes = data;
-        _isLoading = false;
-      });
+    final db = await DatabaseService.instance.database;
+    List<Map<String, dynamic>> result;
+    
+    if (_filterCategoryId == null) {
+      result = await db.query('notes', orderBy: 'created_at DESC');
+    } else {
+      result = await db.query(
+        'notes', 
+        where: 'category_id = ?', 
+        whereArgs: [_filterCategoryId], 
+        orderBy: 'created_at DESC'
+      );
     }
+
+    setState(() {
+      _notes = result.map((json) => Note.fromMap(json)).toList();
+      _isLoading = false;
+    });
   }
 
   @override

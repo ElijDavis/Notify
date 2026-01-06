@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/note_model.dart';
+import '../models/category_model.dart';
 import '../services/database_service.dart';
 import 'package:uuid/uuid.dart';
 import 'package:sqflite/sqflite.dart';
@@ -19,15 +20,26 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
 
   DateTime? _selectedReminder; // This stores the chosen date and time
   Color _selectedColor = Colors.white; // Default color
+  List<Category> _categories = [];
+  String? _selectedCategoryId;
 
   @override
   void initState() {
     super.initState();
     _titleController = TextEditingController(text: widget.note?.title ?? '');
     _contentController = TextEditingController(text: widget.note?.content ?? '');
+    _selectedCategoryId = widget.note?.categoryId; // Load existing category if it exists
+    _loadCategories();
     if (widget.note != null) {
       _selectedColor = Color(widget.note!.colorValue);
     }
+  }
+
+  Future<void> _loadCategories() async {
+    final cats = await DatabaseService.instance.readCategories();
+    setState(() {
+      _categories = cats;
+    });
   }
 
   void _pickColor() {
@@ -58,6 +70,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       content: _contentController.text,
       createdAt: widget.note?.createdAt ?? DateTime.now().toIso8601String(),
       colorValue: _selectedColor.value, // <--- Add this!
+      categoryId: _selectedCategoryId, // <--- SAVES THE TAB ASSIGNMENT
     );
     await DatabaseService.instance.createNote(note);
 
@@ -147,6 +160,29 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
               controller: _titleController,
               decoration: const InputDecoration(hintText: 'Title', border: InputBorder.none),
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            // Put this right below the Title TextField
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: DropdownButtonFormField<String>(
+                value: _selectedCategoryId,
+                decoration: const InputDecoration(
+                  labelText: 'Assign to Tab',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.tab),
+                ),
+                items: _categories.map((cat) {
+                  return DropdownMenuItem(
+                    value: cat.id,
+                    child: Text(cat.name),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() => _selectedCategoryId = value);
+                },
+                // Optional: Add a "Clear" option
+                hint: const Text("Select a Category"),
+              ),
             ),
 
             // Your existing Content TextField
