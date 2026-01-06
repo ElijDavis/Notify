@@ -207,15 +207,18 @@ class _HomeScreenState extends State<HomeScreen> {
                           leading: Icon(Icons.label_outlined, color: Color(child.colorValue), size: 18),
                           title: Text(child.name, style: const TextStyle(fontSize: 14)),
                           trailing: SizedBox(
-                            width: 70, 
+                            width: 110, 
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
-                                Text('${_getNoteCount(child.id)}', 
-                                    style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                Text('${_getNoteCount(parent.id)}', style: const TextStyle(fontSize: 12)),
+                                IconButton(
+                                  icon: const Icon(Icons.share, size: 18),
+                                  onPressed: () => _showShareTabDialog(parent), // <--- New Button
+                                ),
                                 IconButton(
                                   icon: const Icon(Icons.delete_outline, size: 18),
-                                  onPressed: () => _confirmDeleteCategory(child),
+                                  onPressed: () => _confirmDeleteCategory(parent),
                                 ),
                               ],
                             ),
@@ -238,6 +241,14 @@ class _HomeScreenState extends State<HomeScreen> {
             onTap: () {
               Navigator.pop(context);
               _showCreateCategoryDialog();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.group_add, color: Colors.green),
+            title: const Text('Join Shared Tab'),
+            onTap: () {
+              Navigator.pop(context);
+              _showJoinTabDialog();
             },
           ),
         ],
@@ -396,6 +407,50 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _showJoinTabDialog() {
+    final TextEditingController _codeController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Join a Tab'),
+        content: TextField(
+          controller: _codeController,
+          decoration: const InputDecoration(hintText: 'Enter 6-digit code'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              final code = _codeController.text.trim();
+              final user = Supabase.instance.client.auth.currentUser;
+
+              // 1. Find the category with this code in Supabase
+              final response = await Supabase.instance.client
+                  .from('categories')
+                  .select()
+                  .eq('share_code', code)
+                  .single();
+
+              if (response != null && user != null) {
+                // 2. Add the user as a member (Viewer by default)
+                await Supabase.instance.client.from('category_members').insert({
+                  'category_id': response['id'],
+                  'user_id': user.id,
+                  'permission_level': 'viewer', 
+                });
+                
+                _loadDrawerCategories();
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Join'),
+          ),
+        ],
+      ),
+    );
+  }
+
   //load categories for drawer
   Future<void> _loadDrawerCategories() async {
     final cats = await DatabaseService.instance.readCategories();
@@ -420,6 +475,43 @@ class _HomeScreenState extends State<HomeScreen> {
               Navigator.pop(context);
             }, 
             child: const Text('Delete', style: TextStyle(color: Colors.red))
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showShareTabDialog(Category cat) {
+    // Generate a random 6-character code if it doesn't have one
+    final String code = cat.shareCode ?? 
+        (DateTime.now().millisecondsSinceEpoch.toString().substring(7));
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Share "${cat.name}"'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("Give this code to a friend to let them join this tab:"),
+            const SizedBox(height: 15),
+            SelectableText(
+              code,
+              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 4),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              // Save the code to Supabase so it becomes "active"
+              await Supabase.instance.client
+                  .from('categories')
+                  .update({'share_code': code})
+                  .eq('id', cat.id);
+              Navigator.pop(context);
+            },
+            child: const Text('Activate & Close'),
           ),
         ],
       ),
