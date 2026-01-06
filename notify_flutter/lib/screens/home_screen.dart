@@ -271,32 +271,44 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showCreateCategoryDialog() {
     final TextEditingController _categoryController = TextEditingController();
-    Color _tempColor = Colors.grey; // Default color for the new tab
+    Color _tempColor = Colors.grey;
+    String? _selectedParentId; // To track if this is a sub-tab
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder( // Needed to update color inside the dialog
+      builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('New Tab'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _categoryController,
-                decoration: const InputDecoration(hintText: 'Category Name'),
-              ),
-              const SizedBox(height: 20),
-              const Text("Pick Tab Color:"),
-              const SizedBox(height: 10),
-              // A simple horizontal scroll of colors
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: BlockPicker(
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _categoryController,
+                  decoration: const InputDecoration(hintText: 'Category Name'),
+                ),
+                const SizedBox(height: 15),
+                // --- PARENT SELECTOR ---
+                DropdownButtonFormField<String>(
+                  value: _selectedParentId,
+                  decoration: const InputDecoration(labelText: 'Parent Tab (Optional)'),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text("None (Main Tab)")),
+                    ..._drawerCategories.map((cat) => DropdownMenuItem(
+                          value: cat.id,
+                          child: Text(cat.name),
+                        )),
+                  ],
+                  onChanged: (val) => setDialogState(() => _selectedParentId = val),
+                ),
+                const SizedBox(height: 15),
+                const Text("Pick Tab Color:"),
+                BlockPicker(
                   pickerColor: _tempColor,
                   onColorChanged: (color) => setDialogState(() => _tempColor = color),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
@@ -307,9 +319,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     id: const Uuid().v4(),
                     name: _categoryController.text,
                     colorValue: _tempColor.value,
+                    parentCategoryId: _selectedParentId, // Link established here
                   );
                   await DatabaseService.instance.createCategory(newCat);
-                  _loadDrawerCategories(); // Refresh the list
+                  _loadDrawerCategories();
                   Navigator.pop(context);
                 }
               },
