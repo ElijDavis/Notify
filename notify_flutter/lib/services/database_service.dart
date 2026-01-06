@@ -217,7 +217,20 @@ class DatabaseService {
 
   Future<void> deleteCategory(String id) async {
     final db = await instance.database;
+    
+    // 1. Update notes locally: Set category_id to NULL where it matches the deleted ID
+    await db.update(
+      'notes',
+      {'category_id': null},
+      where: 'category_id = ?',
+      whereArgs: [id],
+    );
+
+    // 2. Delete the category locally
     await db.delete('categories', where: 'id = ?', whereArgs: [id]);
+
+    // 3. Sync to Supabase
     await Supabase.instance.client.from('categories').delete().eq('id', id);
+    // (Note: If your Supabase foreign key has "ON DELETE SET NULL", the cloud handles this automatically!)
   }
 }
