@@ -28,6 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _initialSync();
+    _loadDrawerCategories();
     _setupRealtimeSync();
   }
 
@@ -41,6 +42,13 @@ class _HomeScreenState extends State<HomeScreen> {
           await DatabaseService.instance.syncFromCloud();
           _refreshNotes();
         });
+
+    Supabase.instance.client
+      .from('categories')
+      .stream(primaryKey: ['id'])
+      .listen((data) {
+        _loadDrawerCategories(); // <--- Placement #2
+      });
 
     // 2. Listen for Reminders and trigger local notifications
     Supabase.instance.client
@@ -102,105 +110,143 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  @override
+@override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('My Notes')),
-      drawer: Drawer(
-        child: Column(
-          children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(color: Colors.blueGrey),
-              child: Center(child: Text('TABS', style: TextStyle(color: Colors.white, fontSize: 24))),
-            ),
-            ListTile(
-              leading: const Icon(Icons.all_inclusive),
-              title: const Text('All Notes'),
-              onTap: () {
-                setState(() => _filterCategoryId = null);
-                _refreshNotes();
-                Navigator.pop(context);
-              },
-            ),
-            // --- DYNAMIC CATEGORIES LIST ---
-            Expanded(
-              child: ListView.builder(
-                itemCount: _drawerCategories.length,
-                itemBuilder: (context, index) {
-                  final cat = _drawerCategories[index];
-                  return ListTile(
-                    leading: Icon(Icons.label, color: Color(cat.colorValue)),
-                    title: Text(cat.name),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline, size: 20),
-                      onPressed: () async {
-                        await DatabaseService.instance.deleteCategory(cat.id);
-                        _loadDrawerCategories(); // Refresh list
-                      },
-                    ),
-                    onTap: () {
-                      setState(() => _filterCategoryId = cat.id);
-                      _refreshNotes();
-                      Navigator.pop(context);
-                    },
-                  );
-                },
-              ),
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.add),
-              title: const Text('Create New Tab'),
-              onTap: () {
-                Navigator.pop(context);
-                _showCreateCategoryDialog();
-              },
-            ),
-          ],
-        ),
-      ),
+      drawer: _buildDrawer(), // Clean and readable
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _notes.isEmpty
               ? const Center(child: Text('No notes yet. Tap + to add one!'))
-              : ListView.builder(
-                  itemCount: _notes.length,
-                  itemBuilder: (context, index) {
-                    final note = _notes[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      child: ListTile(
-                        title: Text(note.title),
-                        subtitle: Text(note.content),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _confirmDelete(note.id),
-                        ),
-                        onTap: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => NoteEditorScreen(note: note),
-                            ),
-                          );
-                          _refreshNotes();
-                        },
-                      ),
-                    );
-                  },
-                ),
+              : _buildNoteList(), // Clean and readable
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
-          // Open Editor
           await Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const NoteEditorScreen()),
           );
-          // When returning from Editor, refresh the list
           _refreshNotes(); 
         },
         child: const Icon(Icons.add),
       ),
+    );
+  }
+
+  // --- HELPER: DRAWER ---
+  Widget _buildDrawer() {
+    return Drawer(
+      child: Column(
+        children: [
+          const DrawerHeader(
+            decoration: BoxDecoration(color: Colors.blueGrey),
+            child: Center(child: Text('TABS', style: TextStyle(color: Colors.white, fontSize: 24))),
+          ),
+          ListTile(
+            leading: const Icon(Icons.all_inclusive),
+            title: const Text('All Notes'),
+            onTap: () {
+              setState(() => _filterCategoryId = null);
+              _refreshNotes();
+              Navigator.pop(context);
+            },
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: _drawerCategories.length,
+              itemBuilder: (context, index) {
+                final cat = _drawerCategories[index];
+                return ListTile(
+                  leading: Icon(Icons.label, color: Color(cat.colorValue)),
+                  title: Text(cat.name),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 20),
+                    onPressed: () async {
+                      await DatabaseService.instance.deleteCategory(cat.id);
+                      _loadDrawerCategories();
+                    },
+                  ),
+                  onTap: () {
+                    setState(() => _filterCategoryId = cat.id);
+                    _refreshNotes();
+                    Navigator.pop(context);
+                  },
+                );
+              },
+            ),
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.add),
+            title: const Text('Create New Tab'),
+            onTap: () {
+              Navigator.pop(context);
+              _showCreateCategoryDialog();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- HELPER: NOTE LIST ---
+  Widget _buildNoteList() {
+    return ListView.builder(
+      itemCount: _notes.length,
+      itemBuilder: (context, index) {
+        final note = _notes[index];
+        
+        // Find the color of the category assigned to this note
+        Color categoryColor = Colors.transparent;
+        if (note.categoryId != null) {
+          try {
+            categoryColor = Color(_drawerCategories
+                .firstWhere((c) => c.id == note.categoryId)
+                .colorValue);
+          } catch (_) {
+            categoryColor = Colors.transparent;
+          }
+        }
+
+        return Card(
+          color: Color(note.colorValue),
+          margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          child: Stack( // <--- This is where Part C (the badge) lives
+            children: [
+              ListTile(
+                title: Text(note.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(note.content),
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () => _confirmDelete(note.id),
+                ),
+                onTap: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => NoteEditorScreen(note: note)),
+                  );
+                  _refreshNotes();
+                },
+              ),
+              // THE CATEGORY BADGE (Top Right Corner)
+              if (note.categoryId != null)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: categoryColor,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
