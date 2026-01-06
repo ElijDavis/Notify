@@ -277,6 +277,19 @@ class _HomeScreenState extends State<HomeScreen> {
               _showJoinTabDialog();
             },
           ),
+          const Spacer(), // Pushes the logout button to the bottom
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.logout, color: Colors.redAccent),
+            title: const Text('Logout', style: TextStyle(color: Colors.redAccent)),
+            onTap: () async {
+              await Supabase.instance.client.auth.signOut();
+              // After logout, send them back to the Login screen
+              // Note: Replace 'LoginScreen' with the actual name of your login class
+              Navigator.pushReplacementNamed(context, '/login'); 
+            },
+          ),
+          const SizedBox(height: 10), // Some breathing room at the bottom
         ],
       ),
     );
