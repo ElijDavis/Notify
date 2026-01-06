@@ -171,7 +171,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // --- HELPER: DRAWER ---
   Widget _buildDrawer() {
-    // Separate main categories from subcategories
     final mainCategories = _drawerCategories.where((c) => c.parentCategoryId == null).toList();
 
     return Drawer(
@@ -181,7 +180,7 @@ class _HomeScreenState extends State<HomeScreen> {
             decoration: BoxDecoration(color: Colors.blueGrey),
             child: Center(child: Text('TABS', style: TextStyle(color: Colors.white, fontSize: 24))),
           ),
-          ListTile(//All Notes Tile
+          ListTile(
             leading: const Icon(Icons.all_inclusive),
             title: const Text('All Notes'),
             trailing: Text('${_getNoteCount(null)}', 
@@ -195,26 +194,28 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: ListView(
               children: mainCategories.map((parent) {
-                // Find children for this parent
                 final children = _drawerCategories.where((c) => c.parentCategoryId == parent.id).toList();
 
                 return Column(
                   children: [
-                    // Parent Tile
+                    // --- PARENT TILE ---
                     ListTile(
                       leading: Icon(Icons.folder, color: Color(parent.colorValue)),
-                      title: Text(parent.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      title: Text(parent.name, style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
                       trailing: SizedBox(
-                        width: 80, // Gives enough room for both the number and the icon
+                        width: 110, // Increased width to prevent overflow
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
-                            Text('${_getNoteCount(parent.id)}', 
-                                style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
-                            const SizedBox(width: 8),
+                            Text('${_getNoteCount(parent.id)}', style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
                             IconButton(
-                              icon: const Icon(Icons.delete_outline, size: 20),
-                              onPressed: () => _confirmDeleteCategory(parent),
+                              icon: const Icon(Icons.share, size: 18),
+                              onPressed: () => _showShareTabDialog(parent),
+                            ),
+                            IconButton(
+                              // This uses our new logic to decide whether to Delete or Leave
+                              icon: const Icon(Icons.delete_outline, size: 18),
+                              onPressed: () => _confirmLeaveOrDelete(parent),
                             ),
                           ],
                         ),
@@ -225,34 +226,35 @@ class _HomeScreenState extends State<HomeScreen> {
                         Navigator.pop(context);
                       },
                     ),
-                    // Child Tiles (Indented)
+
+                    // --- CHILD TILES ---
                     ...children.map((child) => ListTile(
-                          contentPadding: const EdgeInsets.only(left: 40), // Indent
-                          leading: Icon(Icons.label_outlined, color: Color(child.colorValue), size: 18),
-                          title: Text(child.name, style: const TextStyle(fontSize: 14)),
-                          trailing: SizedBox(
-                            width: 110, 
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                Text('${_getNoteCount(parent.id)}', style: const TextStyle(fontSize: 12)),
-                                IconButton(
-                                  icon: const Icon(Icons.share, size: 18),
-                                  onPressed: () => _showShareTabDialog(parent), // <--- New Button
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, size: 18),
-                                  onPressed: () => _confirmDeleteCategory(parent),
-                                ),
-                              ],
+                      contentPadding: const EdgeInsets.only(left: 40, right: 8),
+                      leading: Icon(Icons.label_outlined, color: Color(child.colorValue), size: 18),
+                      title: Text(child.name, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis),
+                      trailing: SizedBox(
+                        width: 110,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Text('${_getNoteCount(child.id)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                            IconButton(
+                              icon: const Icon(Icons.share, size: 16),
+                              onPressed: () => _showShareTabDialog(child), // Corrected to child
                             ),
-                          ),
-                          onTap: () {
-                            setState(() => _filterCategoryId = child.id);
-                            _refreshNotes();
-                            Navigator.pop(context);
-                          },
-                        )),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 16),
+                              onPressed: () => _confirmLeaveOrDelete(child), // Corrected to child
+                            ),
+                          ],
+                        ),
+                      ),
+                      onTap: () {
+                        setState(() => _filterCategoryId = child.id);
+                        _refreshNotes();
+                        Navigator.pop(context);
+                      },
+                    )),
                   ],
                 );
               }).toList(),
@@ -387,7 +389,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 15),
                 // --- PARENT SELECTOR ---
                 DropdownButtonFormField<String>(
-                  value: _selectedParentId,
+                  initialValue: _selectedParentId,
                   decoration: const InputDecoration(labelText: 'Parent Tab (Optional)'),
                   items: [
                     const DropdownMenuItem(value: null, child: Text("None (Main Tab)")),
@@ -412,12 +414,16 @@ class _HomeScreenState extends State<HomeScreen> {
             ElevatedButton(
               onPressed: () async {
                 if (_categoryController.text.isNotEmpty) {
+                  final user = Supabase.instance.client.auth.currentUser; // Get your ID
+                  
                   final newCat = Category(
                     id: const Uuid().v4(),
                     name: _categoryController.text,
-                    colorValue: _tempColor.value,
-                    parentCategoryId: _selectedParentId, // Link established here
+                    colorValue: _tempColor.toARGB32(), // Updated to non-deprecated method
+                    parentCategoryId: _selectedParentId,
+                    ownerId: user?.id, // <--- This links the tab to YOU
                   );
+
                   await DatabaseService.instance.createCategory(newCat);
                   _loadDrawerCategories();
                   Navigator.pop(context);
@@ -483,22 +489,33 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _confirmDeleteCategory(Category cat) {
+  void _confirmLeaveOrDelete(Category cat) {
+    final user = Supabase.instance.client.auth.currentUser;
+    
+    // Use the user variable to check ownership
+    // If the owner_id is missing (local only) or matches our ID, we are the owner
+    bool isOwner = cat.ownerId == null || cat.ownerId == user?.id;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Delete "${cat.name}"?'),
-        content: const Text('This will remove the tab. Notes in this tab will become "Uncategorized" but will NOT be deleted.'),
+        title: Text(isOwner ? 'Delete Tab?' : 'Leave Tab?'),
+        content: Text(isOwner 
+          ? 'This will delete the tab for everyone.' 
+          : 'You will no longer see this shared tab.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           TextButton(
             onPressed: () async {
-              await DatabaseService.instance.deleteCategory(cat.id);
+              await DatabaseService.instance.leaveOrDeleteCategory(cat.id);
               _loadDrawerCategories();
               _refreshNotes();
               Navigator.pop(context);
             }, 
-            child: const Text('Delete', style: TextStyle(color: Colors.red))
+            child: Text(
+              isOwner ? 'Delete' : 'Leave', 
+              style: const TextStyle(color: Colors.red)
+            ),
           ),
         ],
       ),

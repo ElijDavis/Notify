@@ -4,6 +4,7 @@ class Category {
   final int colorValue;
   final String? parentCategoryId; // Null = Main Category, String = Subcategory
   final String? shareCode;
+  final String? ownerId; // <--- Add this
 
   Category({
     required this.id,
@@ -11,6 +12,7 @@ class Category {
     this.colorValue = 0xFF9E9E9E, // Default Grey
     this.parentCategoryId,
     this.shareCode,
+    this.ownerId, // <--- Add this
   });
 
   Map<String, dynamic> toMap() {
@@ -20,6 +22,7 @@ class Category {
       'color_value': colorValue,
       'parent_category_id': parentCategoryId,
       'share_code': shareCode,
+      'owner_id': ownerId, // <--- Add this
     };
   }
 
@@ -30,6 +33,7 @@ class Category {
       colorValue: map['color_value'] ?? 0xFF9E9E9E,
       parentCategoryId: map['parent_category_id'],
       shareCode: map['share_code'],
+      ownerId: map['owner_id'],
     );
   }
 }

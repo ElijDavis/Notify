@@ -52,7 +52,9 @@ class DatabaseService {
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
           color_value INTEGER,
-          parent_category_id TEXT
+          parent_category_id TEXT,
+          share_code TEXT,
+          owner_id TEXT -- Add this line
         )
       ''');
       await db.execute('''
@@ -190,7 +192,7 @@ class DatabaseService {
   //category functions
 
   // 1. Create/Sync Category
-  Future<void> createCategory(Category category) async {
+  /*Future<void> createCategory(Category category) async {
     final db = await instance.database;
     final user = Supabase.instance.client.auth.currentUser;
 
@@ -206,6 +208,16 @@ class DatabaseService {
         print("Category sync failed: $e");
       }
     }
+  }*/
+
+  Future<void> createCategory(Category category) async {
+    final db = await instance.database;
+    
+    // 1. Save Locally
+    await db.insert('categories', category.toMap());
+
+    // 2. Save to Supabase
+    await Supabase.instance.client.from('categories').insert(category.toMap());
   }
 
   // 2. Read Categories
@@ -215,22 +227,33 @@ class DatabaseService {
     return result.map((json) => Category.fromMap(json)).toList();
   }
 
-  Future<void> deleteCategory(String id) async {
+  Future<void> leaveOrDeleteCategory(String categoryId) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    // 1. Check if I am the owner in Supabase
+    final catData = await Supabase.instance.client
+        .from('categories')
+        .select('owner_id')
+        .eq('id', categoryId)
+        .single();
+
+    if (catData['owner_id'] == user.id) {
+      // I am the owner: Delete it everywhere
+      await Supabase.instance.client.from('categories').delete().eq('id', categoryId);
+    } else {
+      // I am a guest: Just remove my membership
+      await Supabase.instance.client
+          .from('category_members')
+          .delete()
+          .eq('category_id', categoryId)
+          .eq('user_id', user.id);
+    }
+
+    // 2. Clean up locally
     final db = await instance.database;
-    
-    // 1. Update notes locally: Set category_id to NULL where it matches the deleted ID
-    await db.update(
-      'notes',
-      {'category_id': null},
-      where: 'category_id = ?',
-      whereArgs: [id],
-    );
-
-    // 2. Delete the category locally
-    await db.delete('categories', where: 'id = ?', whereArgs: [id]);
-
-    // 3. Sync to Supabase
-    await Supabase.instance.client.from('categories').delete().eq('id', id);
-    // (Note: If your Supabase foreign key has "ON DELETE SET NULL", the cloud handles this automatically!)
+    await db.delete('categories', where: 'id = ?', whereArgs: [categoryId]);
+    // Null out notes assigned to this deleted/left tab
+    await db.update('notes', {'category_id': null}, where: 'category_id = ?', whereArgs: [categoryId]);
   }
 }
