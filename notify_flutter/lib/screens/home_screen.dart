@@ -23,6 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late StreamSubscription<List<Map<String, dynamic>>> _syncStream;
   String? _filterCategoryId; // Null means "Show All"
   List<Category> _drawerCategories = [];
+  List<Note> _allNotesForCounting = [];
 
   @override
   void initState() {
@@ -91,8 +92,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _refreshNotes() async {
     final db = await DatabaseService.instance.database;
-    List<Map<String, dynamic>> result;
     
+    // 1. Get EVERY note for the counters
+    final allData = await db.query('notes');
+    _allNotesForCounting = allData.map((json) => Note.fromMap(json)).toList();
+
+    // 2. Get FILTERED notes for the UI
+    List<Map<String, dynamic>> result;
     if (_filterCategoryId == null) {
       result = await db.query('notes', orderBy: 'created_at DESC');
     } else {
@@ -108,6 +114,11 @@ class _HomeScreenState extends State<HomeScreen> {
       _notes = result.map((json) => Note.fromMap(json)).toList();
       _isLoading = false;
     });
+  }
+
+  int _getNoteCount(String? categoryId) {
+    if (categoryId == null) return _allNotesForCounting.length;
+    return _allNotesForCounting.where((n) => n.categoryId == categoryId).length;
   }
 
 @override
@@ -135,6 +146,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // --- HELPER: DRAWER ---
   Widget _buildDrawer() {
+    // Separate main categories from subcategories
+    final mainCategories = _drawerCategories.where((c) => c.parentCategoryId == null).toList();
+
     return Drawer(
       child: Column(
         children: [
@@ -142,9 +156,11 @@ class _HomeScreenState extends State<HomeScreen> {
             decoration: BoxDecoration(color: Colors.blueGrey),
             child: Center(child: Text('TABS', style: TextStyle(color: Colors.white, fontSize: 24))),
           ),
-          ListTile(
+          ListTile(//All Notes Tile
             leading: const Icon(Icons.all_inclusive),
             title: const Text('All Notes'),
+            trailing: Text('${_getNoteCount(null)}', 
+              style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
             onTap: () {
               setState(() => _filterCategoryId = null);
               _refreshNotes();
@@ -152,27 +168,41 @@ class _HomeScreenState extends State<HomeScreen> {
             },
           ),
           Expanded(
-            child: ListView.builder(
-              itemCount: _drawerCategories.length,
-              itemBuilder: (context, index) {
-                final cat = _drawerCategories[index];
-                return ListTile(
-                  leading: Icon(Icons.label, color: Color(cat.colorValue)),
-                  title: Text(cat.name),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20),
-                    onPressed: () async {
-                      await DatabaseService.instance.deleteCategory(cat.id);
-                      _loadDrawerCategories();
-                    },
-                  ),
-                  onTap: () {
-                    setState(() => _filterCategoryId = cat.id);
-                    _refreshNotes();
-                    Navigator.pop(context);
-                  },
+            child: ListView(
+              children: mainCategories.map((parent) {
+                // Find children for this parent
+                final children = _drawerCategories.where((c) => c.parentCategoryId == parent.id).toList();
+
+                return Column(
+                  children: [
+                    // Parent Tile
+                    ListTile(
+                      leading: Icon(Icons.folder, color: Color(parent.colorValue)),
+                      title: Text(parent.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      trailing: Text('${_getNoteCount(parent.id)}', // <--- Note Count
+                        style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
+                      onTap: () {
+                        setState(() => _filterCategoryId = parent.id);
+                        _refreshNotes();
+                        Navigator.pop(context);
+                      },
+                    ),
+                    // Child Tiles (Indented)
+                    ...children.map((child) => ListTile(
+                          contentPadding: const EdgeInsets.only(left: 40), // Indent
+                          leading: Icon(Icons.label_outlined, color: Color(child.colorValue), size: 18),
+                          title: Text(child.name, style: const TextStyle(fontSize: 14)),
+                          trailing: Text('${_getNoteCount(child.id)}', // <--- Note Count
+                            style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                          onTap: () {
+                            setState(() => _filterCategoryId = child.id);
+                            _refreshNotes();
+                            Navigator.pop(context);
+                          },
+                        )),
+                  ],
                 );
-              },
+              }).toList(),
             ),
           ),
           const Divider(),
