@@ -3,9 +3,10 @@ import '../models/note_model.dart';
 import '../models/category_model.dart';
 import '../services/database_service.dart';
 import 'package:uuid/uuid.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart'; // Add this import
 import 'package:share_plus/share_plus.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:sqflite/sqflite.dart'; // For ConflictAlgorithm
 
 class NoteEditorScreen extends StatefulWidget {
   final Note? note; // If null, we are creating a new note
@@ -23,6 +24,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   Color _selectedColor = Colors.white; // Default color
   List<Category> _categories = [];
   String? _selectedCategoryId;
+  bool _canEdit = true;
 
   @override
   void initState() {
@@ -30,6 +32,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     _titleController = TextEditingController(text: widget.note?.title ?? '');
     _contentController = TextEditingController(text: widget.note?.content ?? '');
     _selectedCategoryId = widget.note?.categoryId; // Load existing category if it exists
+    _checkPermissions();
     _loadCategories();
     if (widget.note != null) {
       _selectedColor = Color(widget.note!.colorValue);
@@ -82,7 +85,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       title: _titleController.text,
       content: _contentController.text,
       createdAt: widget.note?.createdAt ?? DateTime.now().toIso8601String(),
-      colorValue: _selectedColor.value, // <--- Add this!
+      colorValue: _selectedColor.toARGB32(), // <--- Add this!
       categoryId: _selectedCategoryId, // <--- SAVES THE TAB ASSIGNMENT
     );
     await DatabaseService.instance.createNote(note);
@@ -131,6 +134,27 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     });
   }
 
+  Future<void> _checkPermissions() async {
+    // If it's a new note or has no category, you can edit it
+    if (widget.note == null || widget.note?.categoryId == null) return;
+
+    final user = Supabase.instance.client.auth.currentUser;
+    
+    // Check if I am a member and what my level is
+    final response = await Supabase.instance.client
+        .from('category_members')
+        .select('permission_level')
+        .eq('category_id', widget.note!.categoryId!)
+        .eq('user_id', user!.id)
+        .maybeSingle();
+
+    if (response != null && response['permission_level'] == 'viewer') {
+      setState(() {
+        _canEdit = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -173,7 +197,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 10.0),
                 child: Chip(
-                  backgroundColor: Colors.blue.withOpacity(0.1),
+                  backgroundColor: Colors.blue.withValues(alpha: 0.1),
                   label: Text("Reminder: ${_selectedReminder.toString().substring(0, 16)}"),
                   onDeleted: () => setState(() => _selectedReminder = null), 
                   deleteIcon: const Icon(Icons.close, size: 18),
@@ -183,6 +207,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
             // Your existing Title TextField
             TextField(
               controller: _titleController,
+              enabled: _canEdit,
               decoration: const InputDecoration(hintText: 'Title', border: InputBorder.none),
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
@@ -190,7 +215,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8.0),
               child: DropdownButtonFormField<String>(
-                value: _selectedCategoryId,
+                initialValue: _selectedCategoryId,
                 decoration: const InputDecoration(
                   labelText: 'Assign to Tab',
                   border: OutlineInputBorder(),
@@ -214,6 +239,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
             Expanded(
               child: TextField(
                 controller: _contentController,
+                enabled: _canEdit,
                 maxLines: null,
                 decoration: const InputDecoration(hintText: 'Start typing...', border: InputBorder.none),
               ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:sqflite/sqflite.dart';
 import '../services/database_service.dart';
 import '../models/note_model.dart';
 import '../models/category_model.dart';
@@ -93,12 +94,35 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _refreshNotes() async {
     final db = await DatabaseService.instance.database;
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    // 1. Get IDs for categories I've joined
+    final List<Map<String, dynamic>> memberCats = await Supabase.instance.client
+        .from('category_members')
+        .select('category_id')
+        .eq('user_id', user.id);
     
-    // 1. Get EVERY note for the counters
+    final sharedIds = memberCats.map((m) => m['category_id'] as String).toList();
+
+    // 2. Sync Shared Notes to Local SQLite
+    if (sharedIds.isNotEmpty) {
+      final sharedNotesData = await Supabase.instance.client
+          .from('notes')
+          .select()
+          .inFilter('category_id', sharedIds); // FIXED: renamed to inFilter
+
+      for (var noteData in sharedNotesData) {
+        // FIXED: Ensure sqflite is imported for ConflictAlgorithm
+        await db.insert('notes', noteData, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+    }
+    
+    // 3. Update Master List for Counters
     final allData = await db.query('notes');
     _allNotesForCounting = allData.map((json) => Note.fromMap(json)).toList();
 
-    // 2. Get FILTERED notes for the UI
+    // 4. Update Filtered UI List
     List<Map<String, dynamic>> result;
     if (_filterCategoryId == null) {
       result = await db.query('notes', orderBy: 'created_at DESC');
