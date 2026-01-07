@@ -200,6 +200,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  String _generateRandomCode() {
+    // Generates a 6-character alphanumeric code (e.g., XJ49LP)
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Removed confusing O, 0, I, 1
+    return List.generate(6, (index) => chars[DateTime.now().microsecondsSinceEpoch % chars.length + index % chars.length][0]).join();
+  }
+
   int _getNoteCount(String? categoryId) {
     if (categoryId == null) return _allNotesForCounting.length;
     return _allNotesForCounting.where((n) => n.categoryId == categoryId).length;
@@ -454,7 +460,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _showCreateCategoryDialog() {
+  /*void _showCreateCategoryDialog() {
     final TextEditingController _categoryController = TextEditingController();
     Color _tempColor = Colors.grey;
     String? _selectedParentId; // To track if this is a sub-tab
@@ -513,6 +519,92 @@ class _HomeScreenState extends State<HomeScreen> {
                   await DatabaseService.instance.createCategory(newCat);
                   _loadDrawerCategories();
                   Navigator.pop(context);
+                }
+              },
+              child: const Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }*/
+
+  void _showCreateCategoryDialog() {
+    final TextEditingController _categoryController = TextEditingController();
+    Color _tempColor = Colors.grey;
+    String? _selectedParentId;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('New Tab'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _categoryController,
+                  decoration: const InputDecoration(hintText: 'Category Name'),
+                ),
+                const SizedBox(height: 15),
+                DropdownButtonFormField<String>(
+                  value: _selectedParentId,
+                  decoration: const InputDecoration(labelText: 'Parent Tab (Optional)'),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text("None (Main Tab)")),
+                    ..._drawerCategories.map((cat) => DropdownMenuItem(
+                          value: cat.id,
+                          child: Text(cat.name),
+                        )),
+                  ],
+                  onChanged: (val) => setDialogState(() => _selectedParentId = val),
+                ),
+                const SizedBox(height: 15),
+                const Text("Pick Tab Color:"),
+                BlockPicker(
+                  pickerColor: _tempColor,
+                  onColorChanged: (color) => setDialogState(() => _tempColor = color),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                if (_categoryController.text.isNotEmpty) {
+                  final user = Supabase.instance.client.auth.currentUser;
+                  final String newShareCode = _generateRandomCode(); // 1. Generate Code
+
+                  final newCat = Category(
+                    id: const Uuid().v4(),
+                    name: _categoryController.text,
+                    colorValue: _tempColor.toARGB32(),
+                    parentCategoryId: _selectedParentId,
+                    ownerId: user?.id,
+                    shareCode: newShareCode, // 2. Assign Code here
+                  );
+
+                  // 3. Save to LOCAL SQLite
+                  await DatabaseService.instance.createCategory(newCat);
+
+                  // 4. Push to SUPABASE CLOUD immediately
+                  try {
+                    await Supabase.instance.client.from('categories').insert({
+                      'id': newCat.id,
+                      'name': newCat.name,
+                      'color_value': newCat.colorValue,
+                      'parent_category_id': newCat.parentCategoryId,
+                      'owner_id': newCat.ownerId,
+                      'share_code': newCat.shareCode, // Code is now in the cloud!
+                    });
+                  } catch (e) {
+                    print("Cloud sync error: $e");
+                  }
+
+                  _loadDrawerCategories();
+                  if (mounted) Navigator.pop(context);
                 }
               },
               child: const Text('Create'),
@@ -640,7 +732,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showShareTabDialog(Category cat) {
+  /*void _showShareTabDialog(Category cat) {
     // Generate a random 6-character code if it doesn't have one
     final String code = cat.shareCode ?? 
         (DateTime.now().millisecondsSinceEpoch.toString().substring(7));
@@ -666,17 +758,58 @@ class _HomeScreenState extends State<HomeScreen> {
               // Save the code to Supabase so it becomes "active"
               await Supabase.instance.client
                   .from('categories')
-                  .update({'share_code': code})
+                  .update({'share_code': code.trim()})
                   .eq('id', cat.id);
-                  
+
               // NEW: Update local SQLite so the UI knows the code exists
               final db = await DatabaseService.instance.database;
-              await db.update('categories', {'share_code': code}, where: 'id = ?', whereArgs: [cat.id]);
+              await db.update('categories', {'share_code': code.trim()}, where: 'id = ?', whereArgs: [cat.id]);
 
               _loadDrawerCategories(); // Refresh the sidebar UI
               Navigator.pop(context);
             },
             child: const Text('Activate & Close'),
+          ),
+        ],
+      ),
+    );
+  }*/
+
+  void _showShareTabDialog(Category cat) {
+    // If for some reason an old category doesn't have a code, we generate one now
+    final String code = cat.shareCode ?? "NO CODE";
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Share "${cat.name}"'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("Share this code with others to collaborate:"),
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(15),
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: SelectableText(
+                code,
+                style: const TextStyle(
+                  fontSize: 32, 
+                  fontWeight: FontWeight.bold, 
+                  letterSpacing: 4,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
           ),
         ],
       ),
@@ -696,7 +829,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final category = await Supabase.instance.client
           .from('categories')
           .select()
-          .eq('share_code', code)
+          .eq('share_code', code.trim())
           .maybeSingle();
 
       if (category == null) {
