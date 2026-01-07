@@ -523,7 +523,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showJoinTabDialog() {
+  /*void _showJoinTabDialog() {
     final TextEditingController _codeController = TextEditingController();
 
     showDialog(
@@ -565,14 +565,46 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }*/
+
+  void _showJoinTabDialog() {
+    final TextEditingController _codeController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Join a Tab'),
+        content: TextField(
+          controller: _codeController,
+          decoration: const InputDecoration(hintText: 'Enter 6-digit code'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              final code = _codeController.text.trim();
+              if (code.isNotEmpty) {
+                Navigator.pop(context); // Close dialog first
+                _joinSharedTab(code);   // Use the robust function you wrote!
+              }
+            },
+            child: const Text('Join'),
+          ),
+        ],
+      ),
+    );
   }
 
   //load categories for drawer
   Future<void> _loadDrawerCategories() async {
-    final cats = await DatabaseService.instance.readCategories();
-    setState(() {
-      _drawerCategories = cats;
-    });
+    final categories = await DatabaseService.instance.readCategories();
+    
+    // ALWAYS check if the widget is still on screen before calling setState
+    if (mounted) {
+      setState(() {
+        _drawerCategories = categories;
+      });
+    }
   }
 
   void _confirmLeaveOrDelete(Category cat) {
@@ -636,6 +668,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   .from('categories')
                   .update({'share_code': code})
                   .eq('id', cat.id);
+                  
+              // NEW: Update local SQLite so the UI knows the code exists
+              final db = await DatabaseService.instance.database;
+              await db.update('categories', {'share_code': code}, where: 'id = ?', whereArgs: [cat.id]);
+
+              _loadDrawerCategories(); // Refresh the sidebar UI
               Navigator.pop(context);
             },
             child: const Text('Activate & Close'),
@@ -644,4 +682,68 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  Future<void> _joinSharedTab(String code) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    // Show a loading indicator while we process the join
+    setState(() => _isLoading = true);
+
+    try {
+      // 1. Find the category with this code in Supabase
+      // maybeSingle() prevents the crash if the code doesn't exist
+      final category = await Supabase.instance.client
+          .from('categories')
+          .select()
+          .eq('share_code', code)
+          .maybeSingle();
+
+      if (category == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Invalid share code. Please check and try again.")),
+          );
+        }
+        return;
+      }
+
+      // 2. Check if already a member to prevent duplicate errors
+      final existingMember = await Supabase.instance.client
+          .from('category_members')
+          .select()
+          .eq('category_id', category['id'])
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+      if (existingMember == null) {
+        // 3. Add user to category_members in Supabase
+        await Supabase.instance.client.from('category_members').insert({
+          'category_id': category['id'],
+          'user_id': user.id,
+        });
+      }
+
+      // 4. Run the full sync to pull the new category and its notes into SQLite
+      await _refreshNotes(); 
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Successfully joined '${category['name']}'")),
+        );
+      }
+    } catch (e) {
+      print("Join Error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error joining tab: $e")),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
 }
