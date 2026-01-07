@@ -37,7 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _setupRealtimeSync();
   }
 
-  void _setupRealtimeSync() {
+  /*void _setupRealtimeSync() {
     _syncStream = Supabase.instance.client
         .from('notes')
         .stream(primaryKey: ['id'])
@@ -70,7 +70,39 @@ class _HomeScreenState extends State<HomeScreen> {
           }
         }
       });
-  }
+  }*/
+
+void _setupRealtimeSync() {
+  // NOTES STREAM
+  _syncStream = Supabase.instance.client
+      .from('notes')
+      .stream(primaryKey: ['id'])
+      .order('created_at')
+      .listen((List<Map<String, dynamic>> data) async {
+        await DatabaseService.instance.syncFromCloud();
+        _refreshNotes();
+      }, onError: (error) {
+        // This is key! It prevents the "Lost Connection" crash.
+        print("Realtime Sync Issue: $error");
+      });
+
+  // CATEGORIES STREAM
+  Supabase.instance.client
+    .from('categories')
+    .stream(primaryKey: ['id'])
+    .listen((data) {
+      _loadDrawerCategories(); 
+    }, onError: (error) => print("Category Stream Error: $error"));
+
+  // REMINDERS STREAM
+  Supabase.instance.client
+    .from('reminders')
+    .stream(primaryKey: ['id'])
+    .listen((List<Map<String, dynamic>> data) async {
+      await DatabaseService.instance.syncFromCloud();
+      // ... reminder logic
+    }, onError: (error) => print("Reminder Stream Error: $error"));
+}
 
   @override
   void dispose() {
