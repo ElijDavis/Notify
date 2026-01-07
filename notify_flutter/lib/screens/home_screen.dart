@@ -102,6 +102,17 @@ void _setupRealtimeSync() {
       await DatabaseService.instance.syncFromCloud();
       // ... reminder logic
     }, onError: (error) => print("Reminder Stream Error: $error"));
+
+  //member_categories stream
+  // Add this inside your _setupRealtimeSync function
+  Supabase.instance.client
+    .from('category_members')
+    .stream(primaryKey: ['id'])
+    .listen((data) {
+      // When I am added to a new category, refresh the categories and notes!
+      _loadDrawerCategories(); 
+      DatabaseService.instance.syncFromCloud();
+    });
 }
 
   @override
