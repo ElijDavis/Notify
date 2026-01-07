@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:sqflite/sqflite.dart'; // For ConflictAlgorithm
 
+
 class NoteEditorScreen extends StatefulWidget {
   final Note? note; // If null, we are creating a new note
   const NoteEditorScreen({super.key, this.note});
