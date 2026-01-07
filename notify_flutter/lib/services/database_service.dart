@@ -257,4 +257,19 @@ Future<void> createNote(Note note) async {
     await db.delete('categories', where: 'id = ?', whereArgs: [categoryId]);
     await db.update('notes', {'category_id': null}, where: 'category_id = ?', whereArgs: [categoryId]);
   }
+
+  // --- NEW INVITATION LOGIC ---
+  Future<void> inviteUserToCategory(String categoryId, String email) async {
+    try {
+      await Supabase.instance.client.from('category_members').insert({
+        'category_id': categoryId,
+        'invited_email': email,
+      });
+      print("Invitation sent to $email");
+    } catch (e) {
+      print("Failed to send invitation: $e");
+      rethrow;
+    }
+  }
+
 }

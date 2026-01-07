@@ -37,41 +37,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _setupRealtimeSync();
   }
 
-  /*void _setupRealtimeSync() {
-    _syncStream = Supabase.instance.client
-        .from('notes')
-        .stream(primaryKey: ['id'])
-        .order('created_at')
-        .listen((List<Map<String, dynamic>> data) async {
-          await DatabaseService.instance.syncFromCloud();
-          _refreshNotes();
-        });
-
-    Supabase.instance.client
-      .from('categories')
-      .stream(primaryKey: ['id'])
-      .listen((data) {
-        _loadDrawerCategories(); 
-      });
-
-    Supabase.instance.client
-      .from('reminders')
-      .stream(primaryKey: ['id'])
-      .listen((List<Map<String, dynamic>> data) async {
-        await DatabaseService.instance.syncFromCloud();
-        for (var rem in data) {
-          DateTime time = DateTime.parse(rem['reminder_time']);
-          if (time.isAfter(DateTime.now())) {
-            NotificationService().scheduleNotification(
-              rem['id'].toString(), 
-              "Note Reminder", 
-              time
-            );
-          }
-        }
-      });
-  }*/
-
 void _setupRealtimeSync() {
   // NOTES STREAM
   _syncStream = Supabase.instance.client
@@ -129,81 +94,6 @@ void _setupRealtimeSync() {
     }
     _refreshNotes();
   }
-
-  /*Future<void> _refreshNotes() async {
-    setState(() => _isLoading = true);
-
-    try {
-      final db = await DatabaseService.instance.database;
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) return;
-
-      // FIGMA LOGIC: Fetch categories using the RPC function we created
-      // This gets everything: Owned + Invited by email
-      final List<dynamic> allCats = await Supabase.instance.client.rpc('get_visible_categories');
-
-      for (var cat in allCats) {
-        await db.insert('categories', {
-          'id': cat['id'],
-          'name': cat['name'],
-          'color_value': cat['color_value'],
-          'parent_category_id': cat['parent_category_id'],
-          'owner_id': cat['owner_id'],
-        }, conflictAlgorithm: ConflictAlgorithm.replace);
-      }
-
-      final localCats = await db.query('categories');
-      final allVisibleCatIds = localCats.map((c) => c['id'] as String).toList();
-
-      if (allVisibleCatIds.isNotEmpty) {
-        try{
-          final allNotesData = await Supabase.instance.client
-              .from('notes')
-              .select()
-              .inFilter('category_id', allVisibleCatIds);
-
-          for (var noteData in allNotesData) {
-            await db.insert('notes', {
-              'id': noteData['id'],
-              'title': noteData['title'],
-              'content': noteData['content'],
-              'category_id': noteData['category_id'],
-              'color_value': noteData['color_value'],
-              'created_at': noteData['created_at'],
-            }, conflictAlgorithm: ConflictAlgorithm.replace);
-          }
-        } catch (e) {
-          print("Note Sync Error: $e");
-          // If this still fails, it's an RLS policy issue on the 'notes' table
-        }
-      }
-
-      _loadDrawerCategories();
-      final allData = await db.query('notes');
-      _allNotesForCounting = allData.map((json) => Note.fromMap(json)).toList();
-
-      List<Map<String, dynamic>> result;
-      if (_filterCategoryId == null) {
-        result = await db.query('notes', orderBy: 'created_at DESC');
-      } else {
-        result = await db.query(
-          'notes',
-          where: 'category_id = ?',
-          whereArgs: [_filterCategoryId],
-          orderBy: 'created_at DESC',
-        );
-      }
-
-      setState(() {
-        _notes = result.map((json) => Note.fromMap(json)).toList();
-      });
-
-    } catch (e) {
-      print("Refresh Error: $e");
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }*/
 
   Future<void> _refreshNotes() async {
   setState(() => _isLoading = true);
@@ -598,7 +488,7 @@ void _setupRealtimeSync() {
   }
 
   // FIGMA STYLE DIALOG
-  /*void _showFigmaInviteDialog(Category cat) {
+void _showFigmaInviteDialog(Category cat) {
     final TextEditingController _emailController = TextEditingController();
     showDialog(
       context: context,
@@ -616,16 +506,22 @@ void _setupRealtimeSync() {
               final email = _emailController.text.trim().toLowerCase();
               if (email.isNotEmpty) {
                 try {
-                  await Supabase.instance.client.from('category_members').insert({
-                    'category_id': cat.id,
-                    'invited_email': email,
-                  });
+                  // Use the new service method we added
+                  await DatabaseService.instance.inviteUserToCategory(cat.id, email);
+                  
                   if (mounted) {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Invite sent to $email")));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Invite sent to $email"))
+                    );
+                    // Refresh to ensure the UI knows about the new member link
+                    _refreshNotes();
                   }
                 } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Invite failed. Check RLS policies.")));
+                  print("Invite Error: $e");
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Could not send invite. Check your internet."))
+                  );
                 }
               }
             },
@@ -634,52 +530,5 @@ void _setupRealtimeSync() {
         ],
       ),
     );
-  }*/
-
-  void _showFigmaInviteDialog(Category cat) {
-  final TextEditingController _emailController = TextEditingController();
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text('Invite to ${cat.name}'),
-      content: TextField(
-        controller: _emailController,
-        decoration: const InputDecoration(hintText: 'Enter user email'),
-        keyboardType: TextInputType.emailAddress,
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        ElevatedButton(
-          onPressed: () async {
-            final email = _emailController.text.trim().toLowerCase();
-            if (email.isNotEmpty) {
-              try {
-                // We simply insert the email. 
-                // The get_visible_categories function will now 
-                // match this email against the public.profiles table.
-                await Supabase.instance.client.from('category_members').insert({
-                  'category_id': cat.id,
-                  'invited_email': email,
-                });
-                
-                if (mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Invite sent to $email"))
-                  );
-                }
-              } catch (e) {
-                print("Invite Error: $e");
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Could not send invite. Check your internet."))
-                );
-              }
-            }
-          },
-          child: const Text('Invite'),
-        ),
-      ],
-    ),
-  );
-}
+  }
 }
