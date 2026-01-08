@@ -3,6 +3,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:record/record.dart';
 import 'dart:async';
+import 'dart:io' show Platform; // Add this import at the top
 
 class AudioRecorderWidget extends StatefulWidget {
   final Function(String path) onStop;
@@ -35,38 +36,45 @@ class _AudioRecorderWidgetState extends State<AudioRecorderWidget> {
 
   Future<void> _start() async {
     try {
-      // 1. Initialize Speech
-      bool available = await _speech.initialize(
-        onStatus: (status) => print('Speech Status: $status'),
-        onError: (error) => print('Speech Error: $error'),
-      );
+      bool isMobile = Platform.isAndroid || Platform.isIOS;
+      bool speechAvailable = false;
 
-      if (await _recorder.hasPermission() && available) {
+      // 1. Only try to initialize speech if we are on a mobile device
+      if (isMobile) {
+        speechAvailable = await _speech.initialize(
+          onStatus: (status) => print('Speech Status: $status'),
+          onError: (error) => print('Speech Error: $error'),
+        );
+      }
+
+      if (await _recorder.hasPermission()) {
         final directory = await getTemporaryDirectory();
-        final path = '${directory.path}\\temp_record_${DateTime.now().millisecondsSinceEpoch}.m4a';
+        // Logic for Windows vs Mobile paths
+        final path = Platform.isWindows 
+            ? '${directory.path}\\temp_${DateTime.now().millisecondsSinceEpoch}.m4a'
+            : '${directory.path}/temp_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
-        // 2. Start Audio Recording
         await _recorder.start(const RecordConfig(), path: path);
 
-        // 3. Start Live Transcription
-        _speech.listen(
-          onResult: (result) {
-            // This sends the words to your NoteEditor as you speak
-            widget.onSpeechResult(result.recognizedWords);
-          },
-          listenMode: stt.ListenMode.dictation, // Pro Tip 2: Keeps it listening longer
-        );
+        // 2. Only start listening if speech is available (Mobile)
+        if (isMobile && speechAvailable) {
+          _speech.listen(
+            onResult: (result) => widget.onSpeechResult(result.recognizedWords),
+            listenMode: stt.ListenMode.dictation,
+          );
+        } else if (Platform.isWindows) {
+          print("Speech-to-Text is not supported on Windows yet. Recording audio only.");
+        }
 
         setState(() {
           _isRecording = true;
           _recordDuration = 0;
         });
-
-        _timer = Timer.periodic(const Duration(seconds: 1), (t) {
-          setState(() => _recordDuration++);
-        });
+        _timer = Timer.periodic(const Duration(seconds: 1), (t) => setState(() => _recordDuration++));
       }
-    } catch (e) { print("Start Error: $e"); }
+    } catch (e) {
+      print("Start Error: $e");
+    }
   }
 
   Future<void> _stop() async {
