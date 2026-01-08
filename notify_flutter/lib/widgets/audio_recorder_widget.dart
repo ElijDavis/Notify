@@ -1,3 +1,4 @@
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:record/record.dart';
@@ -5,7 +6,8 @@ import 'dart:async';
 
 class AudioRecorderWidget extends StatefulWidget {
   final Function(String path) onStop;
-  const AudioRecorderWidget({super.key, required this.onStop});
+  final Function(String) onSpeechResult;
+  const AudioRecorderWidget({super.key, required this.onStop, required this.onSpeechResult});
 
   @override
   State<AudioRecorderWidget> createState() => _AudioRecorderWidgetState();
@@ -13,6 +15,7 @@ class AudioRecorderWidget extends StatefulWidget {
 
 class _AudioRecorderWidgetState extends State<AudioRecorderWidget> {
   late AudioRecorder _recorder;
+  final stt.SpeechToText _speech = stt.SpeechToText();
   bool _isRecording = false;
   int _recordDuration = 0;
   Timer? _timer;
@@ -32,30 +35,49 @@ class _AudioRecorderWidgetState extends State<AudioRecorderWidget> {
 
   Future<void> _start() async {
     try {
-      if (await _recorder.hasPermission()) {
+      // 1. Initialize Speech
+      bool available = await _speech.initialize(
+        onStatus: (status) => print('Speech Status: $status'),
+        onError: (error) => print('Speech Error: $error'),
+      );
 
-        // 1. Get a valid Windows folder
+      if (await _recorder.hasPermission() && available) {
         final directory = await getTemporaryDirectory();
-        // 2. Create a specific file path
         final path = '${directory.path}\\temp_record_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
-        await _recorder.start(RecordConfig(), path: path);
+        // 2. Start Audio Recording
+        await _recorder.start(const RecordConfig(), path: path);
+
+        // 3. Start Live Transcription
+        _speech.listen(
+          onResult: (result) {
+            // This sends the words to your NoteEditor as you speak
+            widget.onSpeechResult(result.recognizedWords);
+          },
+          listenMode: stt.ListenMode.dictation, // Pro Tip 2: Keeps it listening longer
+        );
+
         setState(() {
           _isRecording = true;
           _recordDuration = 0;
         });
+
         _timer = Timer.periodic(const Duration(seconds: 1), (t) {
           setState(() => _recordDuration++);
         });
       }
-    } catch (e) { print(e); }
+    } catch (e) { print("Start Error: $e"); }
   }
 
   Future<void> _stop() async {
-    final path = await _recorder.stop();
-    _timer?.cancel();
-    setState(() => _isRecording = false);
-    if (path != null) widget.onStop(path);
+    try {
+      final path = await _recorder.stop();
+      await _speech.stop(); // Stop the speech engine
+      _timer?.cancel();
+      
+      setState(() => _isRecording = false);
+      if (path != null) widget.onStop(path);
+    } catch (e) { print("Stop Error: $e"); }
   }
 
   @override
