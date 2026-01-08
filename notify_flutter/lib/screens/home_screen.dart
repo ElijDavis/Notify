@@ -30,6 +30,10 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Category> _drawerCategories = [];
   List<Note> _allNotesForCounting = [];
 
+  // Audio Player for home screen notes
+  final AudioPlayer _homePlayer = AudioPlayer();
+  String? _playingNoteId; // To track which note is currently making sound
+
   @override
   void initState() {
     super.initState();
@@ -344,18 +348,37 @@ void _setupRealtimeSync() {
             children: [
               ListTile(
                 title: Text(note.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text(note.content),
+                subtitle: Text(note.content, maxLines: 2, overflow: TextOverflow.ellipsis),
                 trailing: Row(
-                  mainAxisSize: MainAxisSize.min, // Very important!
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (note.audioUrl != null) 
-                      IconButton(
-                        icon: const Icon(Icons.play_circle_outline, color: Colors.blue),
-                        onPressed: () async {
-                          final player = AudioPlayer();
-                          await player.play(UrlSource(note.audioUrl!));
+                    // --- AUDIO BUTTON ---
+                    if (note.audioUrl != null)
+                      StreamBuilder<PlayerState>(
+                        stream: _homePlayer.onPlayerStateChanged,
+                        builder: (context, snapshot) {
+                          final state = snapshot.data;
+                          final isThisNotePlaying = state == PlayerState.playing && _playingNoteId == note.id;
+
+                          return IconButton(
+                            icon: Icon(
+                              isThisNotePlaying ? Icons.stop_circle : Icons.play_circle_outline,
+                              color: isThisNotePlaying ? Colors.red : Colors.blue,
+                            ),
+                            onPressed: () async {
+                              if (isThisNotePlaying) {
+                                await _homePlayer.stop();
+                                setState(() => _playingNoteId = null);
+                              } else {
+                                await _homePlayer.stop(); // Stop any previous audio
+                                _playingNoteId = note.id;
+                                await _homePlayer.play(UrlSource(note.audioUrl!));
+                              }
+                            },
+                          );
                         },
                       ),
+                    // --- DELETE BUTTON ---
                     IconButton(
                       icon: const Icon(Icons.delete, color: Colors.red),
                       onPressed: () => _confirmDelete(note.id),
@@ -366,6 +389,7 @@ void _setupRealtimeSync() {
                   Share.share('${note.title}\n\n${note.content}', subject: note.title);
                 },
                 onTap: () async {
+                  await _homePlayer.stop(); // Stop music if we navigate away
                   await Navigator.push(
                     context,
                     MaterialPageRoute(builder: (context) => NoteEditorScreen(note: note)),
@@ -373,6 +397,7 @@ void _setupRealtimeSync() {
                   _refreshNotes();
                 },
               ),
+              // --- CATEGORY DOT ---
               if (note.categoryId != null)
                 Positioned(
                   top: 8,

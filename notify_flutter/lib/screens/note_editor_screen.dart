@@ -48,9 +48,20 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     if (widget.note != null) {
       _selectedColor = Color(widget.note!.colorValue);
     }
-    _audioPlayer.onDurationChanged.listen((d) => setState(() => _duration = d));
-    _audioPlayer.onPositionChanged.listen((p) => setState(() => _position = p));
+
+    // Audio Player Listeners
+    _audioPlayer.onDurationChanged.listen((d) {
+      if (!mounted) return; // <--- ADD THIS
+      setState(() => _duration = d);
+    });
+
+    _audioPlayer.onPositionChanged.listen((p) {
+      if (!mounted) return; // <--- ADD THIS
+      setState(() => _position = p);
+    });
+
     _audioPlayer.onPlayerStateChanged.listen((state) {
+      if (!mounted) return; // <--- ADD THIS
       setState(() => _isPlaying = state == PlayerState.playing);
     });
   }
