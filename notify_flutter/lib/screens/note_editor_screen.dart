@@ -296,16 +296,19 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
         ),
       ),
       // 6. BOTTOM RECORDER (The "Figma" Style)
-      bottomNavigationBar: BottomAppBar(
-        height: 100,
-        child: Center(
-          child: AudioRecorderWidget(
-            onStop: (path) {
-              setState(() => _localAudioPath = path);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Audio recorded! Save note to upload.")),
-              );
-            },
+      bottomNavigationBar: Container(
+        height: 100, // Explicitly set the container height
+        color: Theme.of(context).bottomAppBarTheme.color, // Keep the same color
+        child: SafeArea( // Put SafeArea INSIDE the container
+          child: Center(
+            child: AudioRecorderWidget(
+              onStop: (path) {
+                setState(() => _localAudioPath = path);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Audio recorded!")),
+                );
+              },
+            ),
           ),
         ),
       ),
