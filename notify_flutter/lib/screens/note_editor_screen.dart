@@ -247,11 +247,26 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                     icon: const Icon(Icons.delete_outline, color: Colors.red),
                     onPressed: () => setState(() => _localAudioPath = null),
                   ),
-                  onTap: () async {
+                  /*onTap: () async {
                     if (_localAudioPath != null) {
                       await _audioPlayer.play(DeviceFileSource(_localAudioPath!));
                     } else if (widget.note?.audioUrl != null) {
                       await _audioPlayer.play(UrlSource(widget.note!.audioUrl!));
+                    }
+                  },*/
+
+                  onTap: () async {
+                    try {
+                      if (_localAudioPath != null) {
+                        await _audioPlayer.play(DeviceFileSource(_localAudioPath!));
+                      } else if (widget.note?.audioUrl != null) {
+                        // FIX FOR WINDOWS THREADING: 
+                        // Sometimes setting the source before playing helps stabilize the thread
+                        await _audioPlayer.setSource(UrlSource(widget.note!.audioUrl!));
+                        await _audioPlayer.resume();
+                      }
+                    } catch (e) {
+                      print("Playback error: $e");
                     }
                   },
                 ),
