@@ -87,7 +87,8 @@ void _setupRealtimeSync() {
 
   @override
   void dispose() {
-    _syncStream.cancel(); 
+    _syncStream.cancel();
+    _homePlayer.dispose(); 
     super.dispose();
   }
 
@@ -131,7 +132,7 @@ void _setupRealtimeSync() {
         // We do NOT select 'user_id' or '*' here.
         final allNotesData = await Supabase.instance.client
             .from('notes')
-            .select('id, title, content, category_id, color_value, created_at')
+            .select('id, title, content, category_id, color_value, created_at, audio_url')
             .inFilter('category_id', allVisibleCatIds);
 
         for (var noteData in allNotesData) {
@@ -142,6 +143,7 @@ void _setupRealtimeSync() {
             'category_id': noteData['category_id'],
             'color_value': noteData['color_value'],
             'created_at': noteData['created_at'],
+            'audio_url': noteData['audio_url'],
           }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
       } catch (e) {

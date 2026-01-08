@@ -6,6 +6,7 @@ class Note {
   final int colorValue; // Store the color as an integer
   final String? categoryId; // For your future "Tabs" feature
   final String? audioUrl;
+  final String? userId;
 
   Note({
     required this.id,
@@ -15,6 +16,7 @@ class Note {
     this.colorValue = 0xFFFFFFFF, // Default to White
     this.categoryId,
     this.audioUrl,
+    this.userId,
   });
 
   // Convert a Note object into a Map (to save to SQLite)
@@ -27,6 +29,7 @@ class Note {
       'color_value': colorValue,
       'category_id': categoryId,
       'audio_url': audioUrl,
+      'user_id': userId,
     };
   }
 
@@ -40,6 +43,7 @@ class Note {
       colorValue: map['color_value'] ?? 0xFFFFFFFF,
       categoryId: map['category_id'],
       audioUrl: map['audio_url'],
+      userId: map['user_id'],
     );
   }
 }

@@ -105,6 +105,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
 
   Future<void> _saveNote() async {
     final id = widget.note?.id ?? const Uuid().v4();
+    final user = Supabase.instance.client.auth.currentUser;
     String? finalAudioUrl = widget.note?.audioUrl; // Placeholder for audio URL handling
 
     // 1. If we have a new local recording, upload it first
@@ -134,6 +135,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       colorValue: _selectedColor.toARGB32(), // <--- Add this!
       categoryId: _selectedCategoryId,
       audioUrl: finalAudioUrl, // <--- SAVES THE AUDIO URL
+      userId: user?.id,
     );
     await DatabaseService.instance.createNote(note);
 

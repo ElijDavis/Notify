@@ -80,7 +80,8 @@ class DatabaseService {
         created_at TEXT NOT NULL,
         color_value INTEGER DEFAULT 4294967295,
         category_id TEXT,
-        audio_url TEXT
+        audio_url TEXT,
+        user_id TEXT
       )
     ''');
 
@@ -108,22 +109,53 @@ class DatabaseService {
 
   // --- SYNC & CRUD FUNCTIONS ---
 
-Future<void> createNote(Note note) async {
-  final db = await instance.database;
-  final user = Supabase.instance.client.auth.currentUser;
+  /*Future<void> createNote(Note note) async {
+    final db = await instance.database;
+    final user = Supabase.instance.client.auth.currentUser;
 
-  await db.insert('notes', note.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    // Save locally first
+    await db.insert('notes', note.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
 
-  if (user != null) {
-    try {
-      // REMOVE 'user_id': user.id from here
-      await Supabase.instance.client.from('notes').upsert(note.toMap()); 
-      print("Sync Successful!");
-    } catch (e) {
-      print("Cloud sync failed: $e");
+    if (user != null) {
+      try {
+        // Create a map for Supabase that definitely includes the user_id
+        final syncData = note.toMap();
+        syncData['user_id'] = user.id; // Force include the current user's ID
+
+        await Supabase.instance.client
+            .from('notes')
+            .upsert(syncData); 
+            
+        print("Sync Successful!");
+      } catch (e) {
+        print("Cloud sync failed: $e");
+      }
+    }
+  }*/
+
+  Future<void> createNote(Note note) async {
+    final db = await instance.database;
+    final user = Supabase.instance.client.auth.currentUser;
+
+    // Create a map and force the user_id if it's missing
+    Map<String, dynamic> noteMap = note.toMap();
+    if (noteMap['user_id'] == null && user != null) {
+      noteMap['user_id'] = user.id;
+    }
+
+    // 1. Save Locally
+    await db.insert('notes', noteMap, conflictAlgorithm: ConflictAlgorithm.replace);
+
+    // 2. Sync to Supabase
+    if (user != null) {
+      try {
+        await Supabase.instance.client.from('notes').upsert(noteMap);
+        print("Sync Successful!");
+      } catch (e) {
+        print("Cloud sync failed: $e");
+      }
     }
   }
-}
 
   Future<List<Note>> readAllNotes() async {
     final db = await instance.database;
@@ -148,11 +180,13 @@ Future<void> createNote(Note note) async {
 
     try {
       // FIXED: Added explicit select to avoid touching 'users' table
+      // 1. Add audio_url to the select string
       final cloudNotes = await supabase
           .from('notes')
-          .select('id, title, content, created_at, color_value, category_id');
-          
+          .select('id, title, content, created_at, color_value, category_id, audio_url');
+
       for (var noteData in cloudNotes) {
+        // 2. Add audio_url to the local database insert map
         await db.insert('notes', {
           'id': noteData['id'],
           'title': noteData['title'],
@@ -160,6 +194,7 @@ Future<void> createNote(Note note) async {
           'created_at': noteData['created_at'],
           'color_value': noteData['color_value'],
           'category_id': noteData['category_id'],
+          'audio_url': noteData['audio_url'], // <--- ADD THIS LINE
         }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
 
