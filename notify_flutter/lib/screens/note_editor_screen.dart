@@ -311,4 +311,12 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       ),
     );
   }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _contentController.dispose();
+    _audioPlayer.dispose(); // <-- Add this here
+    super.dispose();
+  }
 }
