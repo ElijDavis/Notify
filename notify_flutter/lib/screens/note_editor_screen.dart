@@ -26,6 +26,11 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   String? _localAudioPath; // This stores the path of the recording before it's uploaded
 
+  // Audio playback state
+  Duration _duration = Duration.zero;
+  Duration _position = Duration.zero;
+  bool _isPlaying = false;
+
   DateTime? _selectedReminder; // This stores the chosen date and time
   Color _selectedColor = Colors.white; // Default color
   List<Category> _categories = [];
@@ -43,6 +48,11 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     if (widget.note != null) {
       _selectedColor = Color(widget.note!.colorValue);
     }
+    _audioPlayer.onDurationChanged.listen((d) => setState(() => _duration = d));
+    _audioPlayer.onPositionChanged.listen((p) => setState(() => _position = p));
+    _audioPlayer.onPlayerStateChanged.listen((state) {
+      setState(() => _isPlaying = state == PlayerState.playing);
+    });
   }
 
   Future<void> _loadCategories() async {
@@ -160,6 +170,13 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     });
   }
 
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, "0");
+    String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
+    String twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
+    return "$twoDigitMinutes:$twoDigitSeconds";
+  }
+
   Future<void> _checkPermissions() async {
     // If it's a new note or has no category, you can edit it
     if (widget.note == null || widget.note?.categoryId == null) return;
@@ -230,47 +247,82 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
               ),
 
             // 2. Playback UI (Shows up if audio exists)
-            if (widget.note?.audioUrl != null || _localAudioPath != null)
-              Container(
-                margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.green.withOpacity(0.3)),
-                ),
-                child: ListTile(
-                  leading: const Icon(Icons.play_circle_fill, color: Colors.green, size: 36),
-                  title: Text(_localAudioPath != null ? "New Recording" : "Voice Note Attached"),
-                  subtitle: const Text("Tap to preview audio"),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    onPressed: () => setState(() => _localAudioPath = null),
-                  ),
-                  /*onTap: () async {
-                    if (_localAudioPath != null) {
-                      await _audioPlayer.play(DeviceFileSource(_localAudioPath!));
-                    } else if (widget.note?.audioUrl != null) {
-                      await _audioPlayer.play(UrlSource(widget.note!.audioUrl!));
-                    }
-                  },*/
-
-                  onTap: () async {
-                    try {
-                      if (_localAudioPath != null) {
-                        await _audioPlayer.play(DeviceFileSource(_localAudioPath!));
-                      } else if (widget.note?.audioUrl != null) {
-                        // FIX FOR WINDOWS THREADING: 
-                        // Sometimes setting the source before playing helps stabilize the thread
-                        await _audioPlayer.setSource(UrlSource(widget.note!.audioUrl!));
-                        await _audioPlayer.resume();
-                      }
-                    } catch (e) {
-                      print("Playback error: $e");
-                    }
-                  },
-                ),
+          // NEW PRO AUDIO PLAYER CARD
+          if (widget.note?.audioUrl != null || _localAudioPath != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.blueGrey.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.2)),
               ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      // Play/Pause Button
+                      IconButton(
+                        icon: Icon(
+                          _isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
+                          color: Colors.blue,
+                          size: 42,
+                        ),
+                        onPressed: () async {
+                          if (_isPlaying) {
+                            await _audioPlayer.pause();
+                          } else {
+                            if (_localAudioPath != null) {
+                              await _audioPlayer.play(DeviceFileSource(_localAudioPath!));
+                            } else if (widget.note?.audioUrl != null) {
+                              await _audioPlayer.play(UrlSource(widget.note!.audioUrl!));
+                            }
+                          }
+                        },
+                      ),
+                      // Stop Button
+                      IconButton(
+                        icon: const Icon(Icons.stop_circle, color: Colors.red, size: 30),
+                        onPressed: () => _audioPlayer.stop(),
+                      ),
+                      // Seek Bar (Slider)
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Slider(
+                              min: 0,
+                              max: _duration.inSeconds.toDouble() > 0 
+                                  ? _duration.inSeconds.toDouble() 
+                                  : 1.0,
+                              value: _position.inSeconds.toDouble().clamp(
+                                  0.0, 
+                                  _duration.inSeconds.toDouble() > 0 
+                                      ? _duration.inSeconds.toDouble() 
+                                      : 1.0
+                              ),
+                              onChanged: (value) async {
+                                await _audioPlayer.seek(Duration(seconds: value.toInt()));
+                              },
+                            ),
+                            // Time Indicators
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(_formatDuration(_position), style: const TextStyle(fontSize: 10)),
+                                  Text(_formatDuration(_duration), style: const TextStyle(fontSize: 10)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
 
             // 3. Title
             TextField(
