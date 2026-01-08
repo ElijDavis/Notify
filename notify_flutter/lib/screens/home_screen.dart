@@ -1,3 +1,4 @@
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:notify_flutter/screens/auth_screen.dart';
@@ -344,9 +345,22 @@ void _setupRealtimeSync() {
               ListTile(
                 title: Text(note.title, style: const TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Text(note.content),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
-                  onPressed: () => _confirmDelete(note.id),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min, // Very important!
+                  children: [
+                    if (note.audioUrl != null) 
+                      IconButton(
+                        icon: const Icon(Icons.play_circle_outline, color: Colors.blue),
+                        onPressed: () async {
+                          final player = AudioPlayer();
+                          await player.play(UrlSource(note.audioUrl!));
+                        },
+                      ),
+                    IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      onPressed: () => _confirmDelete(note.id),
+                    ),
+                  ],
                 ),
                 onLongPress: () {
                   Share.share('${note.title}\n\n${note.content}', subject: note.title);

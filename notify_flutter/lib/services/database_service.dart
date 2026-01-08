@@ -22,7 +22,7 @@ class DatabaseService {
 
     return await openDatabase(
       path, 
-      version: 3, 
+      version: 4, 
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -43,6 +43,8 @@ class DatabaseService {
     if (oldVersion < 3) {
       await db.execute('ALTER TABLE notes ADD COLUMN color_value INTEGER DEFAULT 4294967295');
       await db.execute('ALTER TABLE notes ADD COLUMN category_id TEXT');
+      // Inside _createDB or as a new version in _onUpgrade
+      await db.execute('ALTER TABLE notes ADD COLUMN audio_url TEXT');
 
       await db.execute('''
         CREATE TABLE categories (
@@ -64,6 +66,9 @@ class DatabaseService {
         )
       ''');
     }
+    if (oldVersion < 4) {
+      await db.execute('ALTER TABLE notes ADD COLUMN audio_url TEXT');
+    }
   }
 
   Future _createDB(Database db, int version) async {
@@ -74,7 +79,8 @@ class DatabaseService {
         content TEXT NOT NULL,
         created_at TEXT NOT NULL,
         color_value INTEGER DEFAULT 4294967295,
-        category_id TEXT
+        category_id TEXT,
+        audio_url TEXT
       )
     ''');
 

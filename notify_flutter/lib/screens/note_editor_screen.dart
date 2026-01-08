@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:notify_flutter/widgets/audio_recorder_widget.dart';
 import '../models/note_model.dart';
 import '../models/category_model.dart';
 import '../services/database_service.dart';
@@ -7,6 +8,8 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart'; // Add this impor
 import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:sqflite/sqflite.dart'; // For ConflictAlgorithm
+import 'package:audioplayers/audioplayers.dart';
+import 'dart:io';
 
 
 class NoteEditorScreen extends StatefulWidget {
@@ -20,6 +23,8 @@ class NoteEditorScreen extends StatefulWidget {
 class _NoteEditorScreenState extends State<NoteEditorScreen> {
   late TextEditingController _titleController;
   late TextEditingController _contentController;
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  String? _localAudioPath; // This stores the path of the recording before it's uploaded
 
   DateTime? _selectedReminder; // This stores the chosen date and time
   Color _selectedColor = Colors.white; // Default color
@@ -79,6 +84,25 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
 
   Future<void> _saveNote() async {
     final id = widget.note?.id ?? const Uuid().v4();
+    String? finalAudioUrl = widget.note?.audioUrl; // Placeholder for audio URL handling
+
+    // 1. If we have a new local recording, upload it first
+    if (_localAudioPath != null) {
+      final file = File(_localAudioPath!);
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}.m4a';
+      
+      try {
+        await Supabase.instance.client.storage
+            .from('note-audios')
+            .upload(fileName, file);
+            
+        finalAudioUrl = Supabase.instance.client.storage
+            .from('note-audios')
+            .getPublicUrl(fileName);
+      } catch (e) {
+        print("Audio upload failed: $e");
+      }
+    }
     
     // 1. Save the Note (This handles both Local + Supabase)
     final note = Note(
@@ -87,7 +111,8 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       content: _contentController.text,
       createdAt: widget.note?.createdAt ?? DateTime.now().toIso8601String(),
       colorValue: _selectedColor.toARGB32(), // <--- Add this!
-      categoryId: _selectedCategoryId, // <--- SAVES THE TAB ASSIGNMENT
+      categoryId: _selectedCategoryId,
+      audioUrl: finalAudioUrl, // <--- SAVES THE AUDIO URL
     );
     await DatabaseService.instance.createNote(note);
 
@@ -166,7 +191,6 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
             icon: const Icon(Icons.share),
             onPressed: () {
               if (_titleController.text.isNotEmpty || _contentController.text.isNotEmpty) {
-                // This opens the native phone share sheet
                 Share.share(
                   '${_titleController.text}\n\n${_contentController.text}',
                   subject: 'Sharing Note: ${_titleController.text}',
@@ -177,7 +201,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
           IconButton(
             icon: Icon(
               Icons.alarm,
-              color: _selectedReminder != null ? Colors.blue : null, // Blue if set
+              color: _selectedReminder != null ? Colors.blue : null,
             ),
             onPressed: _pickReminder,
           ),
@@ -191,28 +215,57 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start, // Aligns text to the left
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // NEW: Show the selected time ONLY if it exists
+            // 1. Reminders Chip
             if (_selectedReminder != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10.0),
                 child: Chip(
-                  backgroundColor: Colors.blue.withValues(alpha: 0.1),
+                  backgroundColor: Colors.blue.withOpacity(0.1),
                   label: Text("Reminder: ${_selectedReminder.toString().substring(0, 16)}"),
-                  onDeleted: () => setState(() => _selectedReminder = null), 
+                  onDeleted: () => setState(() => _selectedReminder = null),
                   deleteIcon: const Icon(Icons.close, size: 18),
                 ),
               ),
 
-            // Your existing Title TextField
+            // 2. Playback UI (Shows up if audio exists)
+            if (widget.note?.audioUrl != null || _localAudioPath != null)
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.green.withOpacity(0.3)),
+                ),
+                child: ListTile(
+                  leading: const Icon(Icons.play_circle_fill, color: Colors.green, size: 36),
+                  title: Text(_localAudioPath != null ? "New Recording" : "Voice Note Attached"),
+                  subtitle: const Text("Tap to preview audio"),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: () => setState(() => _localAudioPath = null),
+                  ),
+                  onTap: () async {
+                    if (_localAudioPath != null) {
+                      await _audioPlayer.play(DeviceFileSource(_localAudioPath!));
+                    } else if (widget.note?.audioUrl != null) {
+                      await _audioPlayer.play(UrlSource(widget.note!.audioUrl!));
+                    }
+                  },
+                ),
+              ),
+
+            // 3. Title
             TextField(
               controller: _titleController,
               enabled: _canEdit,
               decoration: const InputDecoration(hintText: 'Title', border: InputBorder.none),
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
-            // Put this right below the Title TextField
+
+            // 4. Category Dropdown
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8.0),
               child: DropdownButtonFormField<String>(
@@ -223,20 +276,14 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                   prefixIcon: Icon(Icons.tab),
                 ),
                 items: _categories.map((cat) {
-                  return DropdownMenuItem(
-                    value: cat.id,
-                    child: Text(cat.name),
-                  );
+                  return DropdownMenuItem(value: cat.id, child: Text(cat.name));
                 }).toList(),
-                onChanged: (value) {
-                  setState(() => _selectedCategoryId = value);
-                },
-                // Optional: Add a "Clear" option
+                onChanged: (value) => setState(() => _selectedCategoryId = value),
                 hint: const Text("Select a Category"),
               ),
             ),
 
-            // Your existing Content TextField
+            // 5. Content
             Expanded(
               child: TextField(
                 controller: _contentController,
@@ -246,6 +293,20 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
               ),
             ),
           ],
+        ),
+      ),
+      // 6. BOTTOM RECORDER (The "Figma" Style)
+      bottomNavigationBar: BottomAppBar(
+        height: 100,
+        child: Center(
+          child: AudioRecorderWidget(
+            onStop: (path) {
+              setState(() => _localAudioPath = path);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Audio recorded! Save note to upload.")),
+              );
+            },
+          ),
         ),
       ),
     );
