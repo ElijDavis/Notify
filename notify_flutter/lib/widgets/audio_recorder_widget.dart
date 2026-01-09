@@ -87,53 +87,50 @@ class _AudioRecorderWidgetState extends State<AudioRecorderWidget> {
     }
   }*/
 
-Future<void> _start() async {
-  print("--- RECORDING START SEQUENCE ---");
-  try {
-    // 1. Initialize
-    bool available = await _speech.initialize(
-      onStatus: (status) => print('SPEECH STATUS: $status'),
-      onError: (error) => print('SPEECH ERROR: $error'),
-    );
-    print("Speech Engine Available: $available");
+  Future<void> _start() async {
+    print("--- RECORDING START SEQUENCE ---");
+    try {
+      // 1. Initialize Speech Engine
+      bool available = await _speech.initialize(
+        onStatus: (status) => print('SPEECH STATUS: $status'),
+        onError: (error) => print('SPEECH ERROR: $error'),
+      );
 
-    if (await _recorder.hasPermission()) {
-      print("Microphone Permission: GRANTED");
-      
-      final directory = await getTemporaryDirectory();
-      final path = '${directory.path}/temp_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      if (available && await _recorder.hasPermission()) {
+        setState(() {
+          _recordDuration = 0;
+          _isRecording = true;
+        });
 
-      // 2. Start the hardware recorder
-      await _recorder.start(const RecordConfig(), path: path);
-      print("Audio Recorder: STARTED");
+        // 2. START SPEECH FIRST
+        print("DEBUG: Starting Speech Engine...");
+        /*await _speech.listen(
+          onResult: (result) {
+            print("WORDS HEARD: ${result.recognizedWords}");
+            widget.onSpeechResult(result.recognizedWords);
+          },
+          listenMode: stt.ListenMode.dictation,
+          partialResults: true,
+        );*/
 
-      setState(() {
-        _isRecording = true;
-        _recordDuration = 0;
-      });
+        // 3. WAIT a bit for the speech engine to "own" the mic
+        await Future.delayed(const Duration(milliseconds: 800));
 
-      // 3. Start the Speech-to-Text (The code that was "dead")
-      if (available) {
-        print("DEBUG: Entering Speech block"); // Add this to verify
-        Future.delayed(const Duration(milliseconds: 500), () {
-          print("Speech Engine: STARTING TO LISTEN"); // Should see this in logs now
-          _speech.listen(
-            onResult: (result) {
-              print("WORDS HEARD: ${result.recognizedWords}");
-              widget.onSpeechResult(result.recognizedWords);
-            },
-            listenMode: stt.ListenMode.dictation,
-            partialResults: true,
-          );
+        // 4. START AUDIO FILE RECORDER SECOND
+        final directory = await getTemporaryDirectory();
+        final path = '${directory.path}/temp_${DateTime.now().millisecondsSinceEpoch}.m4a';
+        
+        print("DEBUG: Starting File Recorder...");
+        await _recorder.start(const RecordConfig(), path: path);
+
+        _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+          setState(() => _recordDuration++);
         });
       }
-
-      _timer = Timer.periodic(const Duration(seconds: 1), (t) => setState(() => _recordDuration++));
+    } catch (e) {
+      print("STARTUP CRASH: $e");
     }
-  } catch (e) {
-    print("STARTUP CRASH: $e");
   }
-}
 
   Future<void> _stop() async {
     try {
