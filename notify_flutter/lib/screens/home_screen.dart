@@ -1,4 +1,4 @@
-import 'package:audioplayers/audioplayers.dart';
+/*import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:notify_flutter/screens/auth_screen.dart';
@@ -206,7 +206,238 @@ void _setupRealtimeSync() {
         child: const Icon(Icons.add),
       ),
     );
+  }*/
+
+  import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:notify_flutter/screens/auth_screen.dart';
+import 'package:sqflite/sqflite.dart';
+import '../services/database_service.dart';
+import '../models/note_model.dart';
+import '../models/category_model.dart';
+import 'package:uuid/uuid.dart';
+import 'note_editor_screen.dart';
+import 'dart:async'; 
+import 'dart:io'; 
+import 'package:supabase_flutter/supabase_flutter.dart'; 
+import '../services/notification_service.dart';
+import 'package:share_plus/share_plus.dart';
+import 'dart:math';
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  List<Note> _notes = [];
+  List<Note> _allFetchedNotes = []; // Added to keep a master list for searching
+  bool _isLoading = true;
+  late StreamSubscription<List<Map<String, dynamic>>> _syncStream;
+  String? _filterCategoryId; 
+  List<Category> _drawerCategories = [];
+  List<Note> _allNotesForCounting = [];
+
+  // --- SEARCH & USER MEDAL ADDITIONS ---
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = "";
+  final user = Supabase.instance.client.auth.currentUser;
+
+  // Audio Player for home screen notes
+  final AudioPlayer _homePlayer = AudioPlayer();
+  String? _playingNoteId; 
+
+  @override
+  void initState() {
+    super.initState();
+    _initialSync();
+    _loadDrawerCategories();
+    _setupRealtimeSync();
+    
+    // Listen to search changes
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.toLowerCase();
+        _filterNotesLocally();
+      });
+    });
   }
+
+  // Filter the current list based on search text
+  void _filterNotesLocally() {
+    setState(() {
+      _notes = _allFetchedNotes.where((note) {
+        final titleMatch = note.title.toLowerCase().contains(_searchQuery);
+        final contentMatch = note.content.toLowerCase().contains(_searchQuery);
+        return titleMatch || contentMatch;
+      }).toList();
+    });
+  }
+
+  // ... (Keep your _setupRealtimeSync, dispose, _initialSync methods exactly as they are)
+
+  @override
+  void dispose() {
+    _syncStream.cancel();
+    _homePlayer.dispose(); 
+    _searchController.dispose(); // Clean up controller
+    super.dispose();
+  }
+
+  // ... (Keep your _setupRealtimeSync exactly as it is)
+  void _setupRealtimeSync() {
+    _syncStream = Supabase.instance.client
+        .from('notes')
+        .stream(primaryKey: ['id'])
+        .order('created_at')
+        .listen((List<Map<String, dynamic>> data) async {
+          await DatabaseService.instance.syncFromCloud();
+          _refreshNotes();
+        }, onError: (error) => print("Realtime Sync Issue: $error"));
+
+    Supabase.instance.client
+      .from('categories')
+      .stream(primaryKey: ['id'])
+      .listen((data) => _loadDrawerCategories());
+
+    Supabase.instance.client
+      .from('category_members')
+      .stream(primaryKey: ['id'])
+      .listen((data) {
+        _loadDrawerCategories(); 
+        DatabaseService.instance.syncFromCloud();
+      });
+  }
+
+  Future<void> _initialSync() async {
+    try {
+      await DatabaseService.instance.syncFromCloud();
+    } catch (e) {
+      print("Initial sync failed: $e");
+    }
+    _refreshNotes();
+  }
+
+  Future<void> _refreshNotes() async {
+    setState(() => _isLoading = true);
+    try {
+      final db = await DatabaseService.instance.database;
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
+
+      final List<dynamic> allCats = await Supabase.instance.client.rpc('get_visible_categories');
+      for (var cat in allCats) {
+        await db.insert('categories', {
+          'id': cat['id'], 'name': cat['name'], 'color_value': cat['color_value'],
+          'parent_category_id': cat['parent_category_id'], 'owner_id': cat['owner_id'],
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+
+      _loadDrawerCategories();
+      final allData = await db.query('notes');
+      _allNotesForCounting = allData.map((json) => Note.fromMap(json)).toList();
+
+      List<Map<String, dynamic>> result;
+      if (_filterCategoryId == null) {
+        result = await db.query('notes', orderBy: 'created_at DESC');
+      } else {
+        result = await db.query('notes', where: 'category_id = ?', whereArgs: [_filterCategoryId], orderBy: 'created_at DESC');
+      }
+
+      setState(() {
+        _allFetchedNotes = result.map((json) => Note.fromMap(json)).toList();
+        _filterNotesLocally(); // Apply search filter to the newly refreshed notes
+      });
+
+    } catch (e) {
+      print("Refresh Error: $e");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  int _getNoteCount(String? categoryId) {
+    if (categoryId == null) return _allNotesForCounting.length;
+    return _allNotesForCounting.where((n) => n.categoryId == categoryId).length;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Get user initial for the medal
+    String userInitial = user?.email?.substring(0, 1).toUpperCase() ?? "U";
+
+    return Scaffold(
+      drawer: _buildDrawer(),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // --- CUSTOM HEADER WITH MEDAL & SEARCH ---
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                children: [
+                  Builder(
+                    builder: (context) => GestureDetector(
+                      onTap: () => Scaffold.of(context).openDrawer(),
+                      child: CircleAvatar(
+                        radius: 22,
+                        backgroundColor: Colors.blueGrey.shade800,
+                        child: Text(userInitial, 
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: const InputDecoration(
+                          hintText: 'Search your notes...',
+                          prefixIcon: Icon(Icons.search, color: Colors.grey),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // --- NOTE LIST ---
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _notes.isEmpty
+                      ? Center(child: Text(_searchQuery.isEmpty ? 'No notes yet.' : 'No matches found.'))
+                      : _buildNoteList(),
+            ),
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const NoteEditorScreen()),
+          );
+          _refreshNotes(); 
+        },
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  // ... (Keep your _buildDrawer, _buildNoteList, and dialog methods exactly as they are)
+  // Note: Inside _buildNoteList, ensure it uses the _notes list which is now filtered!
 
   Widget _buildDrawer() {
     final mainCategories = _drawerCategories.where((c) => c.parentCategoryId == null).toList();
