@@ -388,7 +388,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                   const SnackBar(content: Text("Audio recorded!")),
                 );
               },
-              onSpeechResult: (spokenText) {
+              /*onSpeechResult: (spokenText) {
                 setState(() {
                   // This appends the spoken text to your existing content
                   // We use a controller so the cursor stays in the right place
@@ -396,6 +396,17 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                   
                   // If you want it to ADD to what's already there instead of replacing:
                   // _contentController.text = _contentController.text + " " + spokenText;
+                });
+              },*/
+              onSpeechResult: (spokenText) {
+                setState(() {
+                  // This allows the text to appear instantly as you talk
+                  _contentController.text = spokenText;
+                  
+                  // Move the cursor to the end so it doesn't jump around
+                  _contentController.selection = TextSelection.fromPosition(
+                    TextPosition(offset: _contentController.text.length),
+                  );
                 });
               },
             ),
