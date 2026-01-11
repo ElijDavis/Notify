@@ -25,6 +25,8 @@ dependencies:
   audioplayers: ^5.2.1
   path_provider: ^2.1.2
   speech_to_text: ^7.3.0
+  local_auth: ^2.1.6  # For Fingerprint/FaceID
+  intl_phone_field: ^3.2.0 # For clean SMS phone input
 
 flutter:
   uses-material-design: true

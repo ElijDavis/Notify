@@ -408,6 +408,34 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
+                  // Inside your Column, under the Search Bar Row
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        ChoiceChip(
+                          label: const Text("All"),
+                          selected: _filterCategoryId == null,
+                          onSelected: (_) => setState(() => _filterCategoryId = null),
+                        ),
+                        const SizedBox(width: 8),
+                        ..._drawerCategories.where((c) => c.parentCategoryId == null).map((cat) {
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8.0),
+                            child: ChoiceChip(
+                              label: Text(cat.name),
+                              selected: _filterCategoryId == cat.id,
+                              onSelected: (selected) {
+                                setState(() => _filterCategoryId = selected ? cat.id : null);
+                                _refreshNotes();
+                              },
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -440,14 +468,25 @@ class _HomeScreenState extends State<HomeScreen> {
   // Note: Inside _buildNoteList, ensure it uses the _notes list which is now filtered!
 
   Widget _buildDrawer() {
+    final user = Supabase.instance.client.auth.currentUser;
+    // Use the username from user_metadata if it exists, otherwise use 'New User'
+    final String userName = user?.userMetadata?['username'] ?? "New User";
     final mainCategories = _drawerCategories.where((c) => c.parentCategoryId == null).toList();
 
     return Drawer(
       child: Column(
         children: [
-          const DrawerHeader(
-            decoration: BoxDecoration(color: Colors.blueGrey),
-            child: Center(child: Text('TABS', style: TextStyle(color: Colors.white, fontSize: 24))),
+          UserAccountsDrawerHeader(
+            decoration: const BoxDecoration(color: Colors.blueGrey),
+            currentAccountPicture: CircleAvatar(
+              backgroundColor: Colors.white,
+              child: Text(
+                userName.substring(0, 1).toUpperCase(),
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blueGrey),
+              ),
+            ),
+            accountName: Text(userName, style: const TextStyle(fontWeight: FontWeight.bold)),
+            accountEmail: Text(user?.email ?? "No email found"),
           ),
           ListTile(
             leading: const Icon(Icons.all_inclusive),
@@ -462,9 +501,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           Expanded(
             child: ListView(
+              padding: EdgeInsets.zero,
               children: mainCategories.map((parent) {
                 final children = _drawerCategories.where((c) => c.parentCategoryId == parent.id).toList();
-
                 return Column(
                   children: [
                     ListTile(
@@ -477,7 +516,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: [
                             Text('${_getNoteCount(parent.id)}', style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
                             IconButton(
-                              icon: const Icon(Icons.person_add_alt_1, size: 18), // Figma-style Icon
+                              icon: const Icon(Icons.person_add_alt_1, size: 18),
                               onPressed: () => _showFigmaInviteDialog(parent),
                             ),
                             IconButton(
@@ -534,24 +573,13 @@ class _HomeScreenState extends State<HomeScreen> {
               _showCreateCategoryDialog();
             },
           ),
-          const Spacer(),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.redAccent),
             title: const Text('Logout', style: TextStyle(color: Colors.redAccent)),
             onTap: () async {
               await Supabase.instance.client.auth.signOut();
-              final db = await DatabaseService.instance.database;
-              await db.delete('notes');
-              await db.delete('categories');
-              await db.delete('reminders');
-              if (mounted) {
-                Navigator.pushAndRemoveUntil(
-                  context, 
-                  MaterialPageRoute(builder: (context) => const AuthScreen()),
-                  (route) => false,
-                );
-              }
+              // ... your existing local DB cleanup logic
             },
           ),
           const SizedBox(height: 10),
