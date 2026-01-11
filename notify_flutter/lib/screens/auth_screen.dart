@@ -373,6 +373,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       children: [
         IconButton(icon: const Icon(Icons.g_mobiledata, size: 40, color: Colors.red), onPressed: () {}),
         IconButton(icon: const Icon(Icons.apple, size: 30), onPressed: () {}),
+        IconButton(icon: const Icon(Icons.window, size: 30, color: Colors.blue), onPressed: () {}),
       ],
     );
   }

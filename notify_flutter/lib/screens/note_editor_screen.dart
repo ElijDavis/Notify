@@ -252,7 +252,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 10.0),
                 child: Chip(
-                  backgroundColor: Colors.blue.withOpacity(0.1),
+                  backgroundColor: Colors.blue.withValues(alpha: 0.1),
                   label: Text("Reminder: ${_selectedReminder.toString().substring(0, 16)}"),
                   onDeleted: () => setState(() => _selectedReminder = null),
                   deleteIcon: const Icon(Icons.close, size: 18),
@@ -387,27 +387,6 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text("Audio recorded!")),
                 );
-              },
-              /*onSpeechResult: (spokenText) {
-                setState(() {
-                  // This appends the spoken text to your existing content
-                  // We use a controller so the cursor stays in the right place
-                  _contentController.text = spokenText; 
-                  
-                  // If you want it to ADD to what's already there instead of replacing:
-                  // _contentController.text = _contentController.text + " " + spokenText;
-                });
-              },*/
-              onSpeechResult: (spokenText) {
-                setState(() {
-                  // This allows the text to appear instantly as you talk
-                  _contentController.text = spokenText;
-                  
-                  // Move the cursor to the end so it doesn't jump around
-                  _contentController.selection = TextSelection.fromPosition(
-                    TextPosition(offset: _contentController.text.length),
-                  );
-                });
               },
             ),
           ),
