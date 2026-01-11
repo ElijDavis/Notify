@@ -1,83 +1,8 @@
-/*import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'home_screen.dart';
-
-class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key});
-
-  @override
-  State<AuthScreen> createState() => _AuthScreenState();
-}
-
-class _AuthScreenState extends State<AuthScreen> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _isLoading = false;
-
-  Future<void> _handleAuth(bool isSignUp) async {
-    setState(() => _isLoading = true);
-    try {
-      if (isSignUp) {
-        await Supabase.instance.client.auth.signUp(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Check your email or try logging in!')));
-      // Inside _handleAuth, update the success block for Sign In:
-      } else {
-        await Supabase.instance.client.auth.signInWithPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
-        
-        if (mounted) {
-          // This clears the navigation stack so the new user starts fresh
-          Navigator.pushAndRemoveUntil(
-            context, 
-            MaterialPageRoute(builder: (context) => const HomeScreen()),
-            (route) => false,
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Notify Login')),
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          children: [
-            TextField(controller: _emailController, decoration: const InputDecoration(labelText: 'Email')),
-            TextField(controller: _passwordController, decoration: const InputDecoration(labelText: 'Password'), obscureText: true),
-            const SizedBox(height: 20),
-            _isLoading 
-              ? const CircularProgressIndicator() 
-              : Row(
-                  children: [
-                    Expanded(child: ElevatedButton(onPressed: () => _handleAuth(false), child: const Text('Login'))),
-                    const SizedBox(width: 10),
-                    Expanded(child: OutlinedButton(onPressed: () => _handleAuth(true), child: const Text('Sign Up'))),
-                  ],
-                ),
-          ],
-        ),
-      ),
-    );
-  }
-}*/
-
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'home_screen.dart';
 // Note: You will need to add local_auth to your pubspec.yaml for biometrics
-// import 'package:local_auth/local_auth.dart'; 
+import 'package:local_auth/local_auth.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -90,6 +15,7 @@ class _AuthScreenState extends State<AuthScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _usernameController = TextEditingController(); // Added for Step 1
+  final LocalAuthentication auth = LocalAuthentication();
   bool _isLoading = false;
   bool _isSignUpMode = false; // Toggle to show/hide username field
 
@@ -114,6 +40,34 @@ class _AuthScreenState extends State<AuthScreen> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _authenticateWithBiometrics() async {
+    try {
+      // 1. Check if hardware supports it
+      final bool canAuthenticateWithBiometrics = await auth.canCheckBiometrics;
+      final bool canAuthenticate = canAuthenticateWithBiometrics || await auth.isDeviceSupported();
+
+      if (canAuthenticate) {
+        // 2. Trigger the OS popup
+        final bool didAuthenticate = await auth.authenticate(
+          localizedReason: 'Please authenticate to access your notes',
+          options: const AuthenticationOptions(biometricOnly: true),
+        );
+
+        if (didAuthenticate) {
+          // 3. IMPORTANT: Biometrics only "unlocks" the UI. 
+          // You must have a saved Supabase session to actually "log in".
+          if (Supabase.instance.client.auth.currentSession != null) {
+            _navigateToHome();
+          } else {
+            throw "No saved session. Please login with password first.";
+          }
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
